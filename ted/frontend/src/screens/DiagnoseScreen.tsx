@@ -46,7 +46,7 @@ export default function DiagnoseScreen() {
   if (loading) {
     return (
       <div className="ted-screen items-center justify-center text-center">
-        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.12) 0%, transparent 70%)' }} />
+        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.12) 0%, transparent 90%)' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--cyan-dim)', border: '2px solid var(--cyan)', display: 'grid', placeItems: 'center', margin: '0 auto 28px', boxShadow: '0 0 40px var(--cyan-glow)', animation: 'pulse-dot 1.5s ease-in-out infinite' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" strokeWidth="2" style={{ width: 32, height: 32 }}>
@@ -71,7 +71,7 @@ export default function DiagnoseScreen() {
       </nav>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '32px 40px', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-        <div className="orb" style={{ width: 350, height: 350, top: -80, right: -80, background: 'radial-gradient(circle, rgba(59,130,246,.1) 0%, transparent 70%)' }} />
+        <div className="orb" style={{ width: 350, height: 350, top: -80, right: -80, background: 'radial-gradient(circle, rgba(59,130,246,.1) 0%, transparent 90%)' }} />
 
         {/* Header */}
         <div style={{ marginBottom: 28 }}>

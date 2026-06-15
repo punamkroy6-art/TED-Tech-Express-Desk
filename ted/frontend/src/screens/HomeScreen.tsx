@@ -50,7 +50,7 @@ export default function HomeScreen() {
 
       {/* Body */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '36px 40px', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-        <div className="orb" style={{ width: 400, height: 400, top: -100, right: -100, background: 'radial-gradient(circle, rgba(59,130,246,.12) 0%, transparent 70%)' }} />
+        <div className="orb" style={{ width: 400, height: 400, top: -100, right: -100, background: 'radial-gradient(circle, rgba(59,130,246,.12) 0%, transparent 90%)' }} />
 
         {/* Header */}
         <div style={{ marginBottom: 32 }}>

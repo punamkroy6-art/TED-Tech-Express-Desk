@@ -33,22 +33,6 @@ body {
   overflow: hidden;
 }
 
-/* Noise texture overlay */
-/* Noise texture removed — SVG feTurbulence filters can crash GPU renderer in Chrome/Edge */
-
-/* Shared screen wrapper */
-.ted-screen {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  background: #070b14;          /* hardcoded fallback */
-  background: var(--bg, #070b14);
-  overflow: hidden;
-  z-index: 1;
-}
-
 /* Force body dark — overrides any Vite scaffold styles */
 html, body, #root {
   margin: 0;
@@ -62,17 +46,37 @@ html, body, #root {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
-/* Glow orb */
+/* Shared screen wrapper */
+.ted-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg, #070b14);
+  overflow: hidden;
+  z-index: 1;
+}
+
+/*
+ * Glow orb — PERMANENT FIX
+ * Removed filter:blur() entirely. filter:blur on large elements triggers
+ * a separate GPU compositing pass per element, which crashes Chrome/Edge
+ * when multiple blur elements exist on screen simultaneously.
+ *
+ * Replacement: the radial-gradient on each orb already fades to transparent —
+ * making the gradient range larger (70%→90%) achieves the same soft-glow
+ * effect purely in the background paint pass, zero GPU filter overhead.
+ *
+ * All .orb inline styles already set background:radial-gradient(...transparent 70%).
+ * Update those to 90% for the same softness without blur.
+ */
 .orb {
   position: absolute;
   border-radius: 50%;
-  /* Use will-change to promote to own GPU layer — prevents compositor crash */
-  will-change: transform;
-  filter: blur(80px);
   pointer-events: none;
   z-index: 0;
-  /* Contain to prevent repaints of entire page */
-  contain: strict;
+  /* No filter — background radial-gradient achieves glow natively */
 }
 
 /* Shared card */

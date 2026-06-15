@@ -28,7 +28,7 @@ export default function LoanerScreen() {
   if (result) {
     return (
       <div className="ted-screen items-center justify-center text-center">
-        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 70%)' }} />
+        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 90%)' }} />
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 440, padding: '0 24px', width: '100%' }}>
           <div className="ted-card" style={{ padding: 48 }}>
             <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(34,211,238,.1)', border: '1px solid rgba(34,211,238,.3)', display: 'grid', placeItems: 'center', margin: '0 auto 28px', boxShadow: '0 0 30px var(--cyan-glow)' }}>
@@ -61,7 +61,7 @@ export default function LoanerScreen() {
       </nav>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '32px 40px', position: 'relative', zIndex: 1 }}>
-        <div className="orb" style={{ width: 300, height: 300, top: -60, right: -60, background: 'radial-gradient(circle, rgba(34,211,238,.08) 0%, transparent 70%)' }} />
+        <div className="orb" style={{ width: 300, height: 300, top: -60, right: -60, background: 'radial-gradient(circle, rgba(34,211,238,.08) 0%, transparent 90%)' }} />
 
         <div style={{ marginBottom: 32 }}>
           <span className="section-tag">Device Lending</span>

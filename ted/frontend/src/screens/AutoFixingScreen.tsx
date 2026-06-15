@@ -127,7 +127,7 @@ export default function AutoFixingScreen() {
       </nav>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '32px 40px', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-        <div className="orb" style={{ width: 350, height: 350, top: -80, right: -80, background: done ? `radial-gradient(circle, ${success ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.1)'} 0%, transparent 70%)` : 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 70%)' }} />
+        <div className="orb" style={{ width: 350, height: 350, top: -80, right: -80, background: done ? `radial-gradient(circle, ${success ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.1)'} 0%, transparent 90%)` : 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 90%)' }} />
 
         {/* Header */}
         <div style={{ marginBottom: 28 }}>

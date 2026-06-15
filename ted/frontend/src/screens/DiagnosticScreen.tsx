@@ -98,7 +98,7 @@ export default function DiagnosticScreen() {
   if (phase === 'scanning') {
     return (
       <div className="ted-screen items-center justify-center text-center">
-        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 70%)' }} />
+        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 90%)' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
           {/* Animated scanner ring */}
           <div style={{ width: 110, height: 110, borderRadius: '50%', margin: '0 auto 28px', position: 'relative' }}>
@@ -185,7 +185,7 @@ export default function DiagnosticScreen() {
       </nav>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '28px 40px', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-        <div className="orb" style={{ width: 300, height: 300, top: -60, right: -60, background: `radial-gradient(circle, ${healthColor}18 0%, transparent 70%)` }} />
+        <div className="orb" style={{ width: 300, height: 300, top: -60, right: -60, background: `radial-gradient(circle, ${healthColor}18 0%, transparent 90%)` }} />
 
         {/* Header */}
         <div style={{ marginBottom: 24 }}>

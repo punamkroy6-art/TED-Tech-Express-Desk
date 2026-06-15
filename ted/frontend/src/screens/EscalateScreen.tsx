@@ -16,7 +16,7 @@ export default function EscalateScreen() {
 
   return (
     <div className="ted-screen items-center justify-center text-center">
-      <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(59,130,246,.12) 0%, transparent 70%)' }} />
+      <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(59,130,246,.12) 0%, transparent 90%)' }} />
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 480, padding: '0 24px', width: '100%' }}>
         {autoCreating ? (

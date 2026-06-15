@@ -90,7 +90,7 @@ export default function ResultScreen() {
       </nav>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '28px 40px', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
-        <div className="orb" style={{ width: 300, height: 300, top: -60, right: -60, background: `radial-gradient(circle, ${sev.color}18 0%, transparent 70%)` }} />
+        <div className="orb" style={{ width: 300, height: 300, top: -60, right: -60, background: `radial-gradient(circle, ${sev.color}18 0%, transparent 90%)` }} />
 
         {/* Auto-fix banner */}
         {isAutoFix && (

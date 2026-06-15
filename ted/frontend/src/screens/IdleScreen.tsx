@@ -9,9 +9,9 @@ export default function IdleScreen() {
       onClick={() => setScreen('AUTH')}
     >
       {/* Background orbs */}
-      <div className="orb" style={{ width: 600, height: 600, top: -200, left: '50%', transform: 'translateX(-50%)', background: 'radial-gradient(circle, rgba(59,130,246,.18) 0%, transparent 70%)' }} />
-      <div className="orb" style={{ width: 300, height: 300, bottom: 40, left: -80, background: 'radial-gradient(circle, rgba(139,92,246,.12) 0%, transparent 70%)' }} />
-      <div className="orb" style={{ width: 250, height: 250, bottom: 60, right: -60, background: 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 70%)' }} />
+      <div className="orb" style={{ width: 600, height: 600, top: -200, left: '50%', transform: 'translateX(-50%)', background: 'radial-gradient(circle, rgba(59,130,246,.18) 0%, transparent 90%)' }} />
+      <div className="orb" style={{ width: 300, height: 300, bottom: 40, left: -80, background: 'radial-gradient(circle, rgba(139,92,246,.12) 0%, transparent 90%)' }} />
+      <div className="orb" style={{ width: 250, height: 250, bottom: 60, right: -60, background: 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 90%)' }} />
 
       {/* Content */}
       <div style={{ position: 'relative', zIndex: 1 }}>

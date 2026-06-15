@@ -28,7 +28,7 @@ export default function AuthScreen() {
 
   return (
     <div className="ted-screen items-center justify-center">
-      <div className="orb" style={{ width: 500, height: 500, top: -150, left: '50%', transform: 'translateX(-50%)', background: 'radial-gradient(circle, rgba(59,130,246,.14) 0%, transparent 70%)' }} />
+      <div className="orb" style={{ width: 500, height: 500, top: -150, left: '50%', transform: 'translateX(-50%)', background: 'radial-gradient(circle, rgba(59,130,246,.14) 0%, transparent 90%)' }} />
 
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 460, padding: '0 24px' }}>
         {/* Back */}

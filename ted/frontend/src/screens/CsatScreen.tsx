@@ -27,7 +27,7 @@ export default function CsatScreen() {
   if (done) {
     return (
       <div className="ted-screen items-center justify-center text-center">
-        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.12) 0%, transparent 70%)' }} />
+        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.12) 0%, transparent 90%)' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(34,211,238,.12)', border: '2px solid var(--cyan)', display: 'grid', placeItems: 'center', margin: '0 auto 24px', boxShadow: '0 0 40px var(--cyan-glow)' }}>
             <svg viewBox="0 0 24 24" fill="var(--cyan)" style={{ width: 36, height: 36 }}><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
@@ -44,7 +44,7 @@ export default function CsatScreen() {
 
   return (
     <div className="ted-screen items-center justify-center text-center">
-      <div className="orb" style={{ width: 500, height: 500, top: -150, left: '50%', transform: 'translateX(-50%)', background: 'radial-gradient(circle, rgba(59,130,246,.12) 0%, transparent 70%)' }} />
+      <div className="orb" style={{ width: 500, height: 500, top: -150, left: '50%', transform: 'translateX(-50%)', background: 'radial-gradient(circle, rgba(59,130,246,.12) 0%, transparent 90%)' }} />
 
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 480, padding: '0 24px', width: '100%' }}>
         <div className="ted-card" style={{ padding: 48 }}>
