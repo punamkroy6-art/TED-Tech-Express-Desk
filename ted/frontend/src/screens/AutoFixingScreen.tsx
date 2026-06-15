@@ -11,7 +11,7 @@ interface StepResult {
 }
 
 export default function AutoFixingScreen() {
-  const { diagnosis, setScreen, setTicketId } = useSession()
+  const { diagnosis, token, setScreen, setTicketId } = useSession()
   const [steps, setSteps] = useState<StepResult[]>([])
   const [currentStep, setCurrentStep] = useState(-1)
   const [done, setDone] = useState(false)
@@ -40,7 +40,7 @@ export default function AutoFixingScreen() {
         ssh_host: '',
         ssh_user: '',
         ssh_password: '',
-      })
+      }, { headers: { Authorization: `Bearer ${token}` } })
 
       const data = res.data
       setFixName(data.fix_name)
