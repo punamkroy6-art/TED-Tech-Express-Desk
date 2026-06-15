@@ -10,7 +10,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from app.routers import auth, diagnose, ocr, ticket, loaner, health, autofix
+from app.routers import auth, diagnose, ocr, ticket, loaner, health, autofix, diagnostic
 from app.middleware.logging import RequestLoggingMiddleware
 from app.database import init_db
 
@@ -44,7 +44,8 @@ app.include_router(ocr,      prefix='/api',         tags=['OCR'])
 app.include_router(ticket,   prefix='/api',         tags=['Ticket'])
 app.include_router(loaner,   prefix='/api',         tags=['Loaner'])
 app.include_router(health,   prefix='/api',         tags=['Health'])
-app.include_router(autofix,  prefix='/api',         tags=['AutoFix'])
+app.include_router(autofix,     prefix='/api',         tags=['AutoFix'])
+app.include_router(diagnostic,  prefix='/api',         tags=['Diagnostic'])
 
 # Auto-generate Prometheus metrics configuration
 Instrumentator().instrument(app).expose(app)
