@@ -19,7 +19,8 @@ export default function HomeScreen() {
   }
 
   const handleSelect = (key: string) => {
-    setScreen(key === 'loaner' ? 'LOANER' : 'DIAGNOSE')
+    if (key === 'loaner') setScreen('LOANER')
+    else setScreen('DIAGNOSTIC')   // always run auto-diagnostic first
   }
 
   return (

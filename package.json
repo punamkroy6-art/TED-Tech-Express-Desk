@@ -3,5 +3,10 @@
   "private": true,
   "scripts": {
     "dev": "cd ted/frontend && npm run dev -- --port 4173"
+  },
+  "devDependencies": {
+    "canvas": "^3.2.3",
+    "gif-encoder-2": "^1.0.5",
+    "playwright": "^1.61.0"
   }
 }
