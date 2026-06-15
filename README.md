@@ -10,26 +10,13 @@
 
 ---
 
-## 📸 Live Screenshots
+## 🎬 Live Demo
 
-<table>
-  <tr>
-    <td align="center"><img src="screenshots/01-idle.png" width="400"/><br/><b>Idle Screen</b></td>
-    <td align="center"><img src="screenshots/03-home.png" width="400"/><br/><b>Home — Issue Selection</b></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/04-diagnose.png" width="400"/><br/><b>Diagnose — Describe Issue</b></td>
-    <td align="center"><img src="screenshots/05-result-autofix.png" width="400"/><br/><b>⚡ Auto-Fix Result (BSOD)</b></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/06-csat.png" width="400"/><br/><b>CSAT Rating</b></td>
-    <td align="center"><img src="screenshots/07-escalate.png" width="400"/><br/><b>Ticket Raised — Escalation</b></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/08-landing-hero.png" width="400"/><br/><b>Vision AI Landing Page</b></td>
-    <td align="center"><img src="screenshots/09-landing-ted-callout.png" width="400"/><br/><b>TED Kiosk Callout</b></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="screenshots/ted-demo.gif" width="100%" alt="TED — Full session walkthrough: Idle → Auth → Home → Diagnose → IoT Auto-Fix → CSAT → Idle"/>
+</p>
+
+> **Full session walkthrough** — Idle · Employee sign-in · Issue selection · AI diagnosis · IoT auto-fix executing in real-time · CSAT rating · Session reset
 
 ---
 

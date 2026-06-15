@@ -49,8 +49,20 @@ ted/reports/
 reports/
 *.docx
 
-# ── Screenshot capture script (dev only) ─────────────────────────────────
+# ── Screenshot helper scripts (dev only) ─────────────────────────────────
 capture-screenshots.js
+make-demo-gif.js
+
+# ── Old static screenshots (replaced by animated GIF) ────────────────────
+screenshots/01-idle.png
+screenshots/02-auth.png
+screenshots/03-home.png
+screenshots/04-diagnose.png
+screenshots/05-result-autofix.png
+screenshots/06-csat.png
+screenshots/07-escalate.png
+screenshots/08-landing-hero.png
+screenshots/09-landing-ted-callout.png
 
 # ── IDE / OS ─────────────────────────────────────────────────────────────
 .vscode/
