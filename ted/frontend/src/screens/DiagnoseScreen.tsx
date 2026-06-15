@@ -3,121 +3,128 @@ import { api } from '../api/client'
 import { useSession } from '../store/sessionStore'
 
 const QUICK_ISSUES = [
-  'My computer is running very slowly',
-  'I cannot connect to Wi-Fi',
-  'My password has expired or I am locked out',
-  'An application keeps crashing',
-  'I cannot access a website or shared drive',
-  'My screen is flickering or has display issues',
+  { label: 'Computer running very slowly',          icon: '🐢' },
+  { label: 'Cannot connect to Wi-Fi or VPN',        icon: '📡' },
+  { label: 'Password expired or account locked out', icon: '🔐' },
+  { label: 'Application keeps crashing',             icon: '💥' },
+  { label: 'Cannot access a website or shared drive',icon: '🌐' },
+  { label: 'Screen flickering or display issues',    icon: '🖥️' },
 ]
 
 export default function DiagnoseScreen() {
-  const { setScreen, setDiagnosis } = useSession()
+  const { employee, setScreen, setDiagnosis } = useSession()
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const handleSubmit = async (errorText: string) => {
     if (!errorText.trim()) { setError('Please describe your issue'); return }
-    setLoading(true)
-    setError('')
+    setLoading(true); setError('')
     try {
       const res = await api.post('/diagnose', {
         error_text: errorText,
         device_info: { os: 'Windows 11' },
         issue_type: 'software',
+        employee: { name: employee?.name || '', id: employee?.id || '', dept: employee?.dept || '' },
       })
       const diagnosis = res.data
       setDiagnosis(diagnosis)
-
-      if (diagnosis.action === 'create_ticket') {
-        // Nothing actionable — auto-escalate
-        setScreen('ESCALATE')
-      } else {
-        // self_resolve or guided_fix — show steps
-        setScreen('RESULT')
-      }
+      setScreen(diagnosis.action === 'create_ticket' ? 'ESCALATE' : 'RESULT')
     } catch {
       setError('Diagnosis failed. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
-  if (loading) return <ScanningOverlay />
-
-  return (
-    <div
-      className="flex flex-col h-screen px-8 py-6"
-      style={{ background: 'linear-gradient(135deg, #0d1b2a 0%, #1a3a5c 100%)' }}
-    >
-      <button onClick={() => setScreen('HOME')} className="text-sm mb-6" style={{ color: '#5a8ab0' }}>
-        ← Back
-      </button>
-
-      <h1 className="text-3xl font-bold mb-2" style={{ color: '#e8f0fe' }}>
-        Describe your issue
-      </h1>
-      <p className="mb-6 text-sm" style={{ color: '#5a8ab0' }}>
-        Type your problem or choose a common issue below
-      </p>
-
-      <textarea
-        className="w-full rounded-xl p-5 text-lg resize-none outline-none mb-4"
-        rows={4}
-        style={{
-          background: '#1a2d42',
-          border: '2px solid #2E75B6',
-          color: '#e8f0fe',
-        }}
-        placeholder="e.g. My laptop screen is black and won't turn on..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        autoFocus
-      />
-
-      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-
-      <button
-        onClick={() => handleSubmit(text)}
-        className="w-full py-4 rounded-xl text-xl font-bold mb-6 transition-opacity"
-        style={{ background: '#2E75B6', color: '#fff' }}
-      >
-        Diagnose →
-      </button>
-
-      <p className="text-sm mb-4" style={{ color: '#5a8ab0' }}>
-        Or choose a common issue:
-      </p>
-      <div className="flex flex-col gap-3 overflow-auto">
-        {QUICK_ISSUES.map((q) => (
-          <button
-            key={q}
-            onClick={() => handleSubmit(q)}
-            className="w-full text-left px-5 py-4 rounded-xl text-base transition-all hover:scale-[1.01]"
-            style={{ background: '#1a2d42', border: '1px solid #243d57', color: '#90b8e0' }}
-          >
-            {q}
-          </button>
-        ))}
+  if (loading) {
+    return (
+      <div className="ted-screen items-center justify-center text-center">
+        <div className="orb" style={{ width: 400, height: 400, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(34,211,238,.12) 0%, transparent 70%)' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--cyan-dim)', border: '2px solid var(--cyan)', display: 'grid', placeItems: 'center', margin: '0 auto 28px', boxShadow: '0 0 40px var(--cyan-glow)', animation: 'pulse-dot 1.5s ease-in-out infinite' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" strokeWidth="2" style={{ width: 32, height: 32 }}>
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+          </div>
+          <span className="section-tag">AI Engine Active</span>
+          <h2 style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-.03em', color: 'var(--text)', marginBottom: 12 }}>Analysing your issue…</h2>
+          <p style={{ color: 'var(--text-muted)' }}>Running diagnostics and matching knowledge base</p>
+        </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
-function ScanningOverlay() {
   return (
-    <div
-      className="flex flex-col items-center justify-center h-screen"
-      style={{ background: 'linear-gradient(135deg, #0d1b2a 0%, #1a3a5c 100%)' }}
-    >
-      <div className="text-6xl animate-pulse mb-6">🔍</div>
-      <h2 className="text-3xl font-bold mb-3" style={{ color: '#e8f0fe' }}>
-        Analysing your issue…
-      </h2>
-      <p style={{ color: '#5a8ab0' }}>
-        TED AI is running diagnostics. This takes just a moment.
-      </p>
+    <div className="ted-screen">
+      {/* Nav */}
+      <nav className="ted-nav">
+        <button className="btn-ghost" onClick={() => setScreen('HOME')} style={{ padding: '7px 14px', fontSize: '.82rem' }}>← Back</button>
+        <span style={{ color: 'var(--text-dim)', fontSize: '.82rem' }}>TED · AI Diagnosis</span>
+        <span className="eyebrow" style={{ fontSize: '.65rem' }}><span className="pulse-dot" />Live</span>
+      </nav>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '32px 40px', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+        <div className="orb" style={{ width: 350, height: 350, top: -80, right: -80, background: 'radial-gradient(circle, rgba(59,130,246,.1) 0%, transparent 70%)' }} />
+
+        {/* Header */}
+        <div style={{ marginBottom: 28 }}>
+          <span className="section-tag">Describe Your Issue</span>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-.03em', color: 'var(--text)', lineHeight: 1.1 }}>
+            What's going wrong?
+          </h1>
+          <p style={{ color: 'var(--text-muted)', marginTop: 8, fontSize: '.9rem' }}>
+            Type your problem or pick a common issue — our AI handles the rest
+          </p>
+        </div>
+
+        {/* Text area card */}
+        <div className="ted-card" style={{ padding: 4, marginBottom: 16 }}>
+          <textarea
+            className="ted-input"
+            style={{ padding: '18px 20px', fontSize: '1rem', lineHeight: 1.6, resize: 'none', minHeight: 120, border: 'none', borderRadius: 'var(--radius-lg)' }}
+            placeholder="e.g. My laptop screen went blue and it restarted by itself. It says DRIVER_IRQL_NOT_LESS_OR_EQUAL…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        {error && (
+          <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, color: '#fca5a5', fontSize: '.85rem', marginBottom: 12 }}>
+            {error}
+          </div>
+        )}
+
+        <button
+          className="btn-primary"
+          onClick={() => handleSubmit(text)}
+          style={{ padding: '14px 28px', fontSize: '1rem', borderRadius: 'var(--radius)', marginBottom: 28, alignSelf: 'stretch' }}
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 18, height: 18 }}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Run AI Diagnosis
+        </button>
+
+        {/* Quick select */}
+        <div style={{ marginBottom: 12 }}>
+          <span style={{ fontSize: '.78rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '.1em' }}>
+            Common issues
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flex: 1, overflowY: 'auto' }}>
+          {QUICK_ISSUES.map((q) => (
+            <button
+              key={q.label}
+              onClick={() => handleSubmit(q.label)}
+              className="ted-card"
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', cursor: 'pointer', textAlign: 'left', transition: 'border-color .2s, background .2s' }}
+              onMouseOver={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-hi)'; (e.currentTarget as HTMLElement).style.background = 'var(--surface-hi)'; }}
+              onMouseOut={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.background = 'var(--surface)'; }}
+            >
+              <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>{q.icon}</span>
+              <span style={{ fontSize: '.88rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>{q.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
