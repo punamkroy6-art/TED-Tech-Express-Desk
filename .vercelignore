@@ -1,0 +1,35 @@
+# Python virtualenv (large, not needed on Vercel)
+ted/python/
+.venv/
+venv/
+
+# Node modules (rebuilt by Vercel)
+ted/frontend/node_modules/
+node_modules/
+
+# Database files (ephemeral on Vercel)
+*.db
+*.sqlite
+
+# Generated reports
+ted/backend/reports/
+ted/reports/
+
+# Dev scripts
+capture-screenshots.js
+make-demo-gif.js
+
+# Old screenshots (GIF is tracked)
+screenshots/01-*.png
+screenshots/02-*.png
+screenshots/03-*.png
+screenshots/04-*.png
+screenshots/05-*.png
+screenshots/06-*.png
+screenshots/07-*.png
+screenshots/08-*.png
+screenshots/09-*.png
+
+# __pycache__
+**/__pycache__/
+**/*.pyc
