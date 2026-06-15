@@ -27,9 +27,12 @@ async def create_ticket(session_id: str, diagnosis: dict, employee: dict, device
         return {"ticket_id": mock_id, "status": "mock", "url": f"#ticket/{mock_id}"}
 
     # Build payload — use email as fallback if freshworks_id not set
+    # Use rich description if provided by ticket router, else build basic one
+    description = diagnosis.pop("_rich_description", None) or _build_description(diagnosis, device_serial)
+
     payload = {
         "subject": f"[TED] {diagnosis.get('diagnosis', 'IT Issue')[:80]}",
-        "description": _build_description(diagnosis, device_serial),
+        "description": description,
         "priority": _severity_to_priority(diagnosis.get("severity", "medium")),
         "status": 2,  # Open
     }

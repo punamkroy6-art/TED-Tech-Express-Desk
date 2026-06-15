@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api/client'
 import { useSession } from '../store/sessionStore'
+import { captureCurrentScreen, captureScreenText } from '../utils/screenshot'
 
 const SEV_CONFIG: Record<string, { color: string; label: string }> = {
   low:      { color: '#22c55e', label: 'Low' },
@@ -29,9 +30,36 @@ export default function ResultScreen() {
   const handleNotFixed = async () => {
     setSubmitting(true)
     try {
-      const res = await api.post('/ticket', { device_serial: '' })
+      // 1. Capture current error screen
+      const [screenshot_b64, screen_text] = await Promise.all([
+        captureCurrentScreen(),
+        Promise.resolve(captureScreenText()),
+      ])
+
+      // 2. Build full ticket payload with diagnostic history
+      const stepsAttempted = checked  // which steps employee ticked as done
+
+      const res = await api.post('/ticket', {
+        device_serial: '',
+        screenshot_b64,
+        screen_text,
+        ai_diagnosis: diagnosis,
+        steps_attempted: stepsAttempted,
+        error_description: `Employee followed ${diagnosis.fix_steps.length} AI-suggested steps — issue remains unresolved. ` +
+          `${stepsAttempted.filter(Boolean).length} of ${stepsAttempted.length} steps were attempted.`,
+        diagnostic_data: (diagnosis as any).hardware_metrics
+          ? { hardware: { memory: { percent: (diagnosis as any).hardware_metrics?.memory_percent },
+                          cpu: { percent: (diagnosis as any).hardware_metrics?.cpu_percent },
+                          disk: { primary: { free_gb: (diagnosis as any).hardware_metrics?.disk_free_gb } } },
+              issues_found: (diagnosis as any).hardware_flags || [],
+              overall_health: (diagnosis as any).hardware_flags?.length ? 'warning' : 'healthy' }
+          : {},
+        autofix_results: [],
+      })
       setTicketId(res.data.ticket_id)
-    } catch {}
+    } catch {
+      // Ticket creation failed silently — still navigate to escalate
+    }
     setScreen('ESCALATE')
     setSubmitting(false)
   }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useSession } from '../store/sessionStore'
+import { captureCurrentScreen, captureScreenText } from '../utils/screenshot'
 
 interface StepResult {
   label: string
@@ -65,10 +66,31 @@ export default function AutoFixingScreen() {
       setCurrentStep(results.length)
       setDone(true)
 
-      // If failed → auto-create ticket
+      // If autofix failed → create rich ticket with full context
       if (!data.overall_success) {
         try {
-          const ticketRes = await api.post('/ticket', { device_serial: '' })
+          const [screenshot_b64, screen_text] = await Promise.all([
+            captureCurrentScreen(),
+            Promise.resolve(captureScreenText()),
+          ])
+          const failedSteps = results.filter(s => !s.success)
+          const ticketRes = await api.post('/ticket', {
+            device_serial: '',
+            screenshot_b64,
+            screen_text,
+            ai_diagnosis: diagnosis,
+            autofix_results: results.map(s => ({
+              label:   s.label,
+              success: s.success,
+              output:  s.output,
+              duration_ms: s.duration_ms,
+            })),
+            error_description: `IoT Auto-fix ran ${results.length} commands. ` +
+              `${results.filter(s => s.success).length} succeeded, ${failedSteps.length} failed. ` +
+              `Failed steps: ${failedSteps.map(s => s.label).join(', ')}`,
+            diagnostic_data: {},
+            steps_attempted: [],
+          }, { headers: { Authorization: `Bearer ${token}` } })
           setTicketId(ticketRes.data.ticket_id)
         } catch {}
       }
