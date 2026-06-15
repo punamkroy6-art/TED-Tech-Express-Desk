@@ -31,9 +31,18 @@ async def run_diagnosis(session_id: str, payload: dict) -> dict:
 
     # 2. Rule-based match against error_patterns table
     rule_result = await _rule_match(error_text, device_info)
-    if rule_result["confidence"] >= 0.55:  # rule engine is high-precision; use at lower threshold
+    fix_key_from_rule = rule_result.get("fix_key", "")  # preserve IoT key
+
+    if rule_result["confidence"] >= 0.55:
         rule_result["processing_ms"] = int((time.time() - t0) * 1000)
         _try_cache(cache_key, rule_result)
+        return rule_result
+
+    # If rule engine found an IoT fix key but low confidence → use IoT fix
+    # with whatever fix steps the rule had (or empty if none)
+    if fix_key_from_rule and rule_result.get("fix_steps"):
+        rule_result["processing_ms"] = int((time.time() - t0) * 1000)
+        rule_result["action"] = "self_resolve"
         return rule_result
 
     # 3. RAG lookup
@@ -41,6 +50,12 @@ async def run_diagnosis(session_id: str, payload: dict) -> dict:
 
     # 4. LLM inference (Groq) — graceful fallback if key missing
     result = await _llm_diagnose(payload, rag_context)
+    # Attach fix_key to LLM result too (from rule engine keyword match)
+    if fix_key_from_rule and not result.get("fix_key"):
+        result["fix_key"] = fix_key_from_rule
+        result["auto_executable"] = True
+        if result.get("action") == "guided_fix":
+            result["action"] = "self_resolve"
     result["processing_ms"] = int((time.time() - t0) * 1000)
     _try_cache(cache_key, result)
     return result
@@ -91,8 +106,33 @@ async def _rule_match(error_text: str, device_info: dict) -> dict:
             best_score = score
             best_pattern = p
 
-    if best_pattern and best_score >= 0.35:
-        confidence = min(best_score * 1.6, 0.95)
+    # Map error category to IoT fix key
+    # Determine IoT fix_key from error text directly (threshold-independent)
+    et = error_text.lower()
+    fix_key = ""
+    if any(k in et for k in ["bsod","blue screen","driver_irql"]): fix_key = "BSOD"
+    elif any(k in et for k in ["vpn","tunnel"]): fix_key = "VPN"
+    elif any(k in et for k in ["wifi","wi-fi","wireless","internet","network"]): fix_key = "WIFI"
+    elif any(k in et for k in ["okta","mfa","lockout","login failed"]): fix_key = "OKTA"
+    elif any(k in et for k in ["printer","printing","print queue"]): fix_key = "PRINTER"
+    elif any(k in et for k in ["outlook","email","calendar","syncing"]): fix_key = "OUTLOOK"
+    elif any(k in et for k in ["teams","meeting","video call","audio","camera","microphone"]): fix_key = "TEAMS"
+    elif any(k in et for k in ["disk","storage","space full","no space"]): fix_key = "DISK"
+    elif any(k in et for k in ["slow","freeze","freezing","memory","ram"]): fix_key = "HIGH_MEMORY"
+    # Also check best pattern keywords if error text didn't match
+    if not fix_key and best_pattern:
+        kw = " ".join(best_pattern.keywords or []).lower()
+        if any(k in kw for k in ["bsod","blue screen"]): fix_key = "BSOD"
+        elif any(k in kw for k in ["vpn","tunnel"]): fix_key = "VPN"
+        elif any(k in kw for k in ["wifi","network","disconnect"]): fix_key = "WIFI"
+        elif any(k in kw for k in ["okta","mfa","lockout","auth"]): fix_key = "OKTA"
+        elif any(k in kw for k in ["printer","print"]): fix_key = "PRINTER"
+        elif any(k in kw for k in ["outlook","email","sync"]): fix_key = "OUTLOOK"
+        elif any(k in kw for k in ["teams","meeting","audio"]): fix_key = "TEAMS"
+        elif any(k in kw for k in ["disk","storage","space"]): fix_key = "DISK"
+
+    if best_pattern and best_score >= 0.2:
+        confidence = min(best_score * 1.8, 0.95)
         fix_steps = _normalise_fix_steps(best_pattern.fix_steps)
         return {
             "diagnosis": best_pattern.description,
@@ -103,9 +143,21 @@ async def _rule_match(error_text: str, device_info: dict) -> dict:
             "suggested_group": "IT_SD",
             "action": "self_resolve" if confidence >= 0.75 else "guided_fix",
             "llm_model": "rule_engine",
+            "fix_key": fix_key,
+            "auto_executable": bool(fix_key),
         }
 
-    return {"confidence": 0.0, "action": "create_ticket"}
+    # No pattern match — still include fix_key so IoT can attempt fix
+    return {
+        "confidence": 0.0,
+        "action": "create_ticket" if not fix_key else "self_resolve",
+        "fix_key": fix_key,
+        "auto_executable": bool(fix_key),
+        "diagnosis": "",
+        "fix_steps": [],
+        "severity": "medium",
+        "suggested_group": "IT_SD",
+    }
 
 
 async def _llm_diagnose(payload: dict, rag_context: list) -> dict:

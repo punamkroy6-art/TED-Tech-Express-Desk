@@ -6,6 +6,7 @@ export type Screen =
   | 'HOME'
   | 'DIAGNOSE'
   | 'SCANNING'
+  | 'AUTOFIXING'
   | 'RESULT'
   | 'ESCALATE'
   | 'LOANER'

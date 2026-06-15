@@ -29,7 +29,15 @@ export default function DiagnoseScreen() {
       })
       const diagnosis = res.data
       setDiagnosis(diagnosis)
-      setScreen(diagnosis.action === 'create_ticket' ? 'ESCALATE' : 'RESULT')
+      if (diagnosis.action === 'create_ticket') {
+        setScreen('ESCALATE')
+      } else if (diagnosis.action === 'self_resolve' && (diagnosis as any).auto_executable) {
+        // High confidence + IoT commands available → auto-fix immediately
+        setScreen('AUTOFIXING')
+      } else {
+        // guided_fix or no IoT script → show manual steps
+        setScreen('RESULT')
+      }
     } catch {
       setError('Diagnosis failed. Please try again.')
     } finally { setLoading(false) }

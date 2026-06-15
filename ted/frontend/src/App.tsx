@@ -7,6 +7,7 @@ import ResultScreen from './screens/ResultScreen'
 import EscalateScreen from './screens/EscalateScreen'
 import LoanerScreen from './screens/LoanerScreen'
 import CsatScreen from './screens/CsatScreen'
+import AutoFixingScreen from './screens/AutoFixingScreen'
 import { useIdleTimeout } from './hooks/useIdleTimeout'
 import './index.css'
 
@@ -15,7 +16,7 @@ export default function App() {
   useIdleTimeout()
 
   return (
-    <div className="h-screen w-screen overflow-hidden">
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#070b14' }}>
       {screen === 'IDLE' && <IdleScreen />}
       {screen === 'AUTH' && <AuthScreen />}
       {screen === 'HOME' && <HomeScreen />}
@@ -23,6 +24,7 @@ export default function App() {
       {screen === 'RESULT' && <ResultScreen />}
       {screen === 'ESCALATE' && <EscalateScreen />}
       {screen === 'LOANER' && <LoanerScreen />}
+      {screen === 'AUTOFIXING' && <AutoFixingScreen />}
       {screen === 'CSAT' && <CsatScreen />}
     </div>
   )

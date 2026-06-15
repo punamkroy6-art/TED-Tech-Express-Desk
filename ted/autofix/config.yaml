@@ -1,110 +1,264 @@
-# TED Auto-Fix Engine — Rule Configuration
-# Each rule defines a condition and the fix steps to apply
+# TED Auto-Fix Engine — IoT Rule Configuration
+# Each rule defines triggers, diagnosis, and executable fix commands
+# fix_commands.windows: run locally on kiosk/device via subprocess
+# fix_commands.ssh:     run remotely on employee device via Paramiko SSH
 
 thresholds:
-  cpu_percent: 85          # % CPU usage to flag as high
-  memory_percent: 88       # % RAM usage to flag
-  disk_percent: 90         # % disk usage to flag
-  disk_free_gb: 5          # GB free disk to flag
-  battery_percent: 15      # % battery to flag (if applicable)
+  cpu_percent:    85    # % CPU to flag
+  memory_percent: 88    # % RAM to flag
+  disk_percent:   90    # % disk to flag
+  disk_free_gb:   5     # GB free to flag
+  battery_percent: 15   # % battery to flag
 
+# ── AI-matched issue auto-fix scripts ──────────────────────────────────────
+# Keyed by 'ai_pattern' — matched to AI engine diagnosis category
+ai_fixes:
+
+  WIFI:
+    name: "Wi-Fi / Network Reset"
+    category: network
+    severity: medium
+    description: "Resetting network adapter and flushing DNS cache automatically"
+    steps:
+      - label: "Disconnecting Wi-Fi adapter"
+        command_windows: "netsh wlan disconnect"
+        command_ssh: "nmcli radio wifi off"
+        timeout: 5
+      - label: "Flushing DNS cache"
+        command_windows: "ipconfig /flushdns"
+        command_ssh: "sudo systemd-resolve --flush-caches"
+        timeout: 5
+      - label: "Resetting TCP/IP stack"
+        command_windows: "netsh int ip reset"
+        command_ssh: "sudo ip route flush cache"
+        timeout: 10
+      - label: "Renewing IP address"
+        command_windows: "ipconfig /release && ipconfig /renew"
+        command_ssh: "sudo dhclient -r && sudo dhclient"
+        timeout: 15
+      - label: "Reconnecting to corporate Wi-Fi"
+        command_windows: "netsh wlan connect name=Corporate"
+        command_ssh: "nmcli radio wifi on"
+        timeout: 10
+
+  VPN:
+    name: "VPN Tunnel Reset"
+    category: network
+    severity: high
+    description: "Resetting VPN connection and clearing cached credentials"
+    steps:
+      - label: "Stopping VPN service"
+        command_windows: "net stop \"Cisco AnyConnect Secure Mobility Agent\" 2>nul || net stop \"Pulse Secure Service\" 2>nul || echo VPN stopped"
+        command_ssh: "sudo systemctl stop vpn 2>/dev/null; echo done"
+        timeout: 10
+      - label: "Flushing DNS cache"
+        command_windows: "ipconfig /flushdns"
+        command_ssh: "sudo systemd-resolve --flush-caches"
+        timeout: 5
+      - label: "Restarting VPN service"
+        command_windows: "net start \"Cisco AnyConnect Secure Mobility Agent\" 2>nul || net start \"Pulse Secure Service\" 2>nul || echo VPN restarted"
+        command_ssh: "sudo systemctl start vpn 2>/dev/null; echo done"
+        timeout: 10
+
+  PRINTER:
+    name: "Printer Spooler Reset"
+    category: peripheral
+    severity: low
+    description: "Clearing stuck print queue and restarting print spooler service"
+    steps:
+      - label: "Stopping Print Spooler"
+        command_windows: "net stop spooler"
+        command_ssh: "sudo systemctl stop cups"
+        timeout: 10
+      - label: "Clearing print queue"
+        command_windows: "del /Q /F /S \"%systemroot%\\System32\\spool\\PRINTERS\\*\" 2>nul & echo Queue cleared"
+        command_ssh: "sudo rm -f /var/spool/cups/* 2>/dev/null; echo done"
+        timeout: 5
+      - label: "Starting Print Spooler"
+        command_windows: "net start spooler"
+        command_ssh: "sudo systemctl start cups"
+        timeout: 10
+
+  TEAMS:
+    name: "Microsoft Teams Cache Clear"
+    category: application
+    severity: medium
+    description: "Killing Teams, clearing cache, and restarting the application"
+    steps:
+      - label: "Closing Microsoft Teams"
+        command_windows: "taskkill /F /IM Teams.exe 2>nul & taskkill /F /IM ms-teams.exe 2>nul & echo Teams closed"
+        command_ssh: "pkill -f teams 2>/dev/null; echo done"
+        timeout: 8
+      - label: "Clearing Teams cache"
+        command_windows: "rd /s /q \"%AppData%\\Microsoft\\Teams\\Cache\" 2>nul & rd /s /q \"%AppData%\\Microsoft\\Teams\\blob_storage\" 2>nul & echo Cache cleared"
+        command_ssh: "rm -rf ~/.config/teams/Cache 2>/dev/null; echo done"
+        timeout: 10
+      - label: "Restarting Teams"
+        command_windows: "start ms-teams:"
+        command_ssh: "nohup teams &>/dev/null &"
+        timeout: 5
+
+  OUTLOOK:
+    name: "Outlook Restart & Repair"
+    category: application
+    severity: medium
+    description: "Restarting Outlook and running inbox repair"
+    steps:
+      - label: "Closing Outlook"
+        command_windows: "taskkill /F /IM OUTLOOK.EXE 2>nul & echo Outlook closed"
+        command_ssh: "pkill -f outlook 2>/dev/null; echo done"
+        timeout: 8
+      - label: "Clearing Outlook temp files"
+        command_windows: "del /q /f \"%LOCALAPPDATA%\\Microsoft\\Outlook\\*.tmp\" 2>nul & echo Temp cleared"
+        command_ssh: "echo done"
+        timeout: 5
+      - label: "Restarting Outlook"
+        command_windows: "start outlook.exe"
+        command_ssh: "nohup outlook &>/dev/null &"
+        timeout: 5
+
+  DISK:
+    name: "Disk Cleanup"
+    category: storage
+    severity: high
+    description: "Running automated disk cleanup to free space"
+    steps:
+      - label: "Clearing Windows temp files"
+        command_windows: "del /s /q \"%TEMP%\\*\" 2>nul & echo Temp cleared"
+        command_ssh: "rm -rf /tmp/* 2>/dev/null; echo done"
+        timeout: 15
+      - label: "Emptying Recycle Bin"
+        command_windows: "PowerShell -Command \"Clear-RecycleBin -Force -ErrorAction SilentlyContinue; Write-Output 'Recycle Bin emptied'\""
+        command_ssh: "echo not applicable"
+        timeout: 10
+      - label: "Running Disk Cleanup"
+        command_windows: "cleanmgr /sagerun:1"
+        command_ssh: "apt-get clean 2>/dev/null; echo done"
+        timeout: 30
+
+  HIGH_MEMORY:
+    name: "Memory Optimisation"
+    category: performance
+    severity: medium
+    description: "Identifying and terminating high-memory background processes"
+    steps:
+      - label: "Checking top memory consumers"
+        command_windows: "PowerShell -Command \"Get-Process | Sort-Object WorkingSet -Descending | Select-Object -First 5 Name,@{N='MB';E={[math]::Round($_.WorkingSet/1MB,1)}} | Format-Table -AutoSize\""
+        command_ssh: "ps aux --sort=-%mem | head -6"
+        timeout: 10
+      - label: "Clearing standby memory"
+        command_windows: "PowerShell -Command \"[System.GC]::Collect(); Write-Output 'Memory cleared'\""
+        command_ssh: "sync && echo 3 | sudo tee /proc/sys/vm/drop_caches"
+        timeout: 5
+      - label: "Terminating browser background tasks"
+        command_windows: "taskkill /F /IM chrome.exe 2>nul & taskkill /F /IM msedge.exe 2>nul & echo Background tasks cleared"
+        command_ssh: "pkill -f chrome 2>/dev/null; echo done"
+        timeout: 8
+
+  BSOD:
+    name: "System File Repair"
+    category: system
+    severity: critical
+    description: "Running Windows System File Checker and DISM repair"
+    steps:
+      - label: "Running System File Checker"
+        command_windows: "sfc /scannow"
+        command_ssh: "sudo fsck -f / 2>/dev/null; echo done"
+        timeout: 120
+      - label: "Checking Windows image health"
+        command_windows: "DISM /Online /Cleanup-Image /CheckHealth"
+        command_ssh: "echo not applicable"
+        timeout: 30
+      - label: "Flushing event logs"
+        command_windows: "wevtutil cl System && wevtutil cl Application && echo Logs cleared"
+        command_ssh: "sudo journalctl --vacuum-time=1d"
+        timeout: 10
+
+  OKTA:
+    name: "Browser Cache & Cookie Reset"
+    category: auth
+    severity: medium
+    description: "Clearing browser authentication cache to resolve login issues"
+    steps:
+      - label: "Clearing Edge browser cache"
+        command_windows: "PowerShell -Command \"Remove-Item -Path '$env:LOCALAPPDATA\\Microsoft\\Edge\\User Data\\Default\\Cache\\*' -Recurse -Force -ErrorAction SilentlyContinue; Write-Output 'Edge cache cleared'\""
+        command_ssh: "rm -rf ~/.cache/chromium/Default/Cache 2>/dev/null; echo done"
+        timeout: 10
+      - label: "Clearing Chrome browser cache"
+        command_windows: "PowerShell -Command \"Remove-Item -Path '$env:LOCALAPPDATA\\Google\\Chrome\\User Data\\Default\\Cache\\*' -Recurse -Force -ErrorAction SilentlyContinue; Write-Output 'Chrome cache cleared'\""
+        command_ssh: "rm -rf ~/.config/google-chrome/Default/Cache 2>/dev/null; echo done"
+        timeout: 10
+      - label: "Opening Okta self-service"
+        command_windows: "start https://company.okta.com/signin/forgot-password"
+        command_ssh: "xdg-open https://company.okta.com/signin/forgot-password 2>/dev/null; echo opened"
+        timeout: 5
+
+# ── Hardware threshold auto-fix rules ──────────────────────────────────────
 rules:
   - id: HIGH_CPU
     name: "High CPU Usage"
     category: performance
     severity: medium
-    trigger:
-      metric: cpu_percent
-      operator: ">"
-      value: 85
-    diagnosis: "Your device CPU is running at high load, causing slowness or freezes."
-    fix_steps:
-      - "Open Task Manager (Ctrl+Shift+Esc) and identify high CPU processes."
-      - "End any unnecessary processes consuming high CPU."
-      - "Disable startup programs: Task Manager > Startup tab."
-      - "Restart the device to clear CPU load."
+    trigger: { metric: cpu_percent, operator: ">", value: 85 }
+    diagnosis: "CPU is running at high load — terminating background processes automatically"
+    ai_fix_key: HIGH_MEMORY
     fix_commands:
       windows:
-        - "taskkill /F /IM OneDrive.exe"      # example — kill known heavy process
+        - "taskkill /F /IM OneDrive.exe 2>nul & taskkill /F /IM SearchIndexer.exe 2>nul & echo CPU processes cleared"
       ssh: []
 
   - id: HIGH_MEMORY
     name: "High Memory Usage"
     category: performance
     severity: medium
-    trigger:
-      metric: memory_percent
-      operator: ">"
-      value: 88
-    diagnosis: "System memory (RAM) is almost full, causing slowness and application crashes."
-    fix_steps:
-      - "Open Task Manager and find processes using the most memory."
-      - "Close applications you are not currently using."
-      - "Restart the device to free RAM."
+    trigger: { metric: memory_percent, operator: ">", value: 88 }
+    diagnosis: "RAM usage is critically high — clearing memory and background processes"
+    ai_fix_key: HIGH_MEMORY
     fix_commands:
-      windows: []
+      windows:
+        - "PowerShell -Command \"[System.GC]::Collect(); Write-Output 'Memory cleared'\""
       ssh: []
 
   - id: LOW_DISK
     name: "Low Disk Space"
     category: storage
     severity: high
-    trigger:
-      metric: disk_free_gb
-      operator: "<"
-      value: 5
-    diagnosis: "System drive is critically low on free space, which can cause crashes and prevent updates."
-    fix_steps:
-      - "Open Settings > System > Storage to see what's using space."
-      - "Delete Temporary files and empty the Recycle Bin."
-      - "Run Disk Cleanup on the C: drive."
-      - "Contact IT if space is still insufficient — archiving may be required."
+    trigger: { metric: disk_free_gb, operator: "<", value: 5 }
+    diagnosis: "Disk space critically low — running automated cleanup"
+    ai_fix_key: DISK
     fix_commands:
       windows:
+        - "del /s /q \"%TEMP%\\*\" 2>nul & echo Temp cleared"
         - "cleanmgr /sagerun:1"
-      ssh: []
-
-  - id: LOW_BATTERY
-    name: "Critical Battery"
-    category: hardware
-    severity: high
-    trigger:
-      metric: battery_percent
-      operator: "<"
-      value: 15
-    diagnosis: "Battery level is critically low — device may shut down unexpectedly."
-    fix_steps:
-      - "Connect your device to a power adapter immediately."
-      - "If charging but not increasing, try a different power cable or adapter."
-      - "If battery does not charge, a loaner device may be available at this kiosk."
-    fix_commands:
-      windows: []
       ssh: []
 
   - id: DISK_PERCENT_HIGH
     name: "Disk Usage Critical"
     category: storage
     severity: high
-    trigger:
-      metric: disk_percent
-      operator: ">"
-      value: 90
-    diagnosis: "Disk usage is above 90%, which can severely impact system performance."
-    fix_steps:
-      - "Run Disk Cleanup: search 'Disk Cleanup' in the Start menu."
-      - "Check Downloads folder for large files to delete."
-      - "Uninstall unused applications via Settings > Apps."
+    trigger: { metric: disk_percent, operator: ">", value: 90 }
+    diagnosis: "Disk usage above 90% — running automated cleanup"
+    ai_fix_key: DISK
     fix_commands:
       windows:
-        - "cleanmgr /sagerun:1"
+        - "del /s /q \"%TEMP%\\*\" 2>nul & echo Temp cleared"
+      ssh: []
+
+  - id: LOW_BATTERY
+    name: "Critical Battery"
+    category: hardware
+    severity: high
+    trigger: { metric: battery_percent, operator: "<", value: 15 }
+    diagnosis: "Battery critically low — please connect to power immediately"
+    fix_commands:
+      windows: []
       ssh: []
 
 ssh:
   default_port: 22
   timeout_secs: 10
-  known_hosts_policy: "auto_add"   # auto_add | reject
+  known_hosts_policy: "auto_add"
 
 report:
   output_dir: "reports"
   company_name: "Tech Express Desk"
-  logo_text: "TED"
