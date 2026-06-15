@@ -1,0 +1,74 @@
+# ── Python ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.so
+
+# Virtual environments
+ted/python/
+venv/
+.venv/
+env/
+ENV/
+
+# ── Environment / Secrets ────────────────────────────────────────────────
+.env
+.env.local
+.env.production
+*.env
+!.env.example
+
+# ── Database ─────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Node / Frontend ──────────────────────────────────────────────────────
+node_modules/
+ted/frontend/node_modules/
+ted/frontend/dist/
+.npm
+.yarn
+
+# ── Word Reports (generated at runtime) ──────────────────────────────────
+ted/reports/
+reports/
+*.docx
+
+# ── IDE / OS ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs ─────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Docker ───────────────────────────────────────────────────────────────
+.docker/
+
+# ── Test / Cache ─────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

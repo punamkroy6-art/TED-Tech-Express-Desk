@@ -1,0 +1,277 @@
+﻿
+
+
+TED
+Tech Express Desk
+Document 3 of 5  —  Background Schema
+
+
+
+CONFIDENTIAL
+
+1. Database Overview
+TED uses PostgreSQL as its primary database with the pgvector extension for semantic search. Redis is used for ephemeral session caching. Below are all table definitions, field specs, relationships, and indexing strategy.
+
+Table
+Purpose
+Key Relationships
+employees
+Employee directory cache
+Referenced by sessions, tickets
+sessions
+Active + historical kiosk sessions
+Parent of audit_log, diagnosis_results
+diagnosis_results
+AI engine output per session
+Child of sessions
+error_patterns
+100+ known error → fix mappings
+Used by AI engine
+knowledge_embeddings
+Vector store for RAG (KB + tickets)
+Queried by RAG pipeline
+freshworks_tickets
+Mirror of created FW tickets
+Child of sessions
+loaner_requests
+Loaner device transactions
+Child of sessions, ref employees
+offline_queue
+Queued payloads when API offline
+Standalone, processed by worker
+audit_log
+Immutable event log
+Child of sessions
+system_config
+Runtime config key-value store
+Standalone
+
+2. Table Definitions
+  📋  TABLE: employees
+Cache of employee data synced from corporate directory / IdP. Refreshed on each authentication.
+  CREATE TABLE employees (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id     VARCHAR(100) UNIQUE NOT NULL,   -- corporate ID
+    display_name    VARCHAR(200) NOT NULL,
+    email           VARCHAR(200) NOT NULL,
+    department      VARCHAR(100),
+    manager_email   VARCHAR(200),
+    freshworks_id   VARCHAR(100),                  -- Freshworks requester ID
+    last_seen       TIMESTAMP,
+    created_at      TIMESTAMP DEFAULT now(),
+    updated_at      TIMESTAMP DEFAULT now()
+  );
+  CREATE INDEX idx_employees_emp_id ON employees(employee_id);
+
+  📋  TABLE: sessions
+One record per kiosk session. Tracks the full lifecycle from auth to resolution or escalation.
+  CREATE TABLE sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id     VARCHAR(100) REFERENCES employees(employee_id),
+    kiosk_id        VARCHAR(50) NOT NULL,           -- which physical kiosk
+    started_at      TIMESTAMP DEFAULT now(),
+    ended_at        TIMESTAMP,
+    duration_secs   INT GENERATED ALWAYS AS (
+                      EXTRACT(EPOCH FROM (ended_at - started_at))::INT
+                    ) STORED,
+    auth_method     VARCHAR(20),                    -- 'badge' | 'sso'
+    issue_type      VARCHAR(50),                    -- 'software'|'hardware'|'network'|'loaner'
+    outcome         VARCHAR(30),                    -- 'resolved'|'ticket_created'|'abandoned'
+    ticket_id       VARCHAR(100),                   -- Freshworks ticket ID if raised
+    csat_score      SMALLINT CHECK (csat_score BETWEEN 1 AND 5),
+    created_at      TIMESTAMP DEFAULT now()
+  );
+  CREATE INDEX idx_sessions_employee ON sessions(employee_id);
+  CREATE INDEX idx_sessions_outcome  ON sessions(outcome);
+  CREATE INDEX idx_sessions_started  ON sessions(started_at);
+
+  📋  TABLE: diagnosis_results
+Stores the AI engine output for each diagnostic run within a session.
+  CREATE TABLE diagnosis_results (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id        UUID REFERENCES sessions(id) ON DELETE CASCADE,
+    run_number        SMALLINT DEFAULT 1,           -- session may have multiple runs
+    input_error_text  TEXT,
+    input_device_info JSONB,
+    ocr_output        JSONB,                        -- PaddleOCR result
+    diagnosis         TEXT,
+    confidence        FLOAT CHECK (confidence BETWEEN 0 AND 1),
+    severity          VARCHAR(20),                  -- 'low'|'medium'|'high'|'critical'
+    fix_steps         JSONB,                        -- array of step strings
+    kb_references     JSONB,                        -- array of {id, title, url}
+    past_ticket_refs  JSONB,                        -- array of {id, summary, resolution}
+    suggested_group   VARCHAR(100),
+    action_taken      VARCHAR(30),                  -- 'self_resolve'|'guided'|'ticket'
+    llm_model         VARCHAR(100),                 -- which LLM was used
+    llm_tokens_used   INT,
+    processing_ms     INT,                          -- latency in milliseconds
+    created_at        TIMESTAMP DEFAULT now()
+  );
+  CREATE INDEX idx_diag_session ON diagnosis_results(session_id);
+
+  📋  TABLE: error_patterns
+Structured database of known IT errors with matched fix steps. Core of the rule-based engine.
+  CREATE TABLE error_patterns (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    error_code      VARCHAR(100),                   -- e.g. '0x0000007E'
+    keywords        TEXT[] NOT NULL,                -- search terms
+    os_platform     VARCHAR(50),                    -- 'windows'|'macos'|'linux'|'any'
+    category        VARCHAR(100),                   -- 'bsod'|'network'|'auth'|'driver'...
+    severity        VARCHAR(20) DEFAULT 'medium',
+    description     TEXT,
+    fix_steps       JSONB NOT NULL,                 -- [{step:1, instruction:'...'}]
+    estimated_mins  SMALLINT,                       -- expected fix time
+    success_rate    FLOAT,                          -- from past resolved tickets
+    source          VARCHAR(30),                    -- 'manual'|'imported'|'ml_generated'
+    is_active       BOOLEAN DEFAULT true,
+    created_at      TIMESTAMP DEFAULT now(),
+    updated_at      TIMESTAMP DEFAULT now()
+  );
+  CREATE INDEX idx_error_keywords   ON error_patterns USING GIN(keywords);
+  CREATE INDEX idx_error_category   ON error_patterns(category);
+  CREATE INDEX idx_error_platform   ON error_patterns(os_platform);
+
+  📋  TABLE: knowledge_embeddings
+Vector store powering the RAG pipeline. Stores embeddings of KB articles and past resolved tickets.
+  CREATE EXTENSION IF NOT EXISTS vector;
+  
+  CREATE TABLE knowledge_embeddings (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_type     VARCHAR(20) NOT NULL,           -- 'kb_article'|'ticket'
+    source_id       VARCHAR(100) NOT NULL,          -- Freshworks ID
+    title           TEXT NOT NULL,
+    content         TEXT,                           -- chunked text
+    resolution      TEXT,                           -- how it was resolved
+    category        VARCHAR(100),
+    embedding       vector(384) NOT NULL,           -- all-MiniLM-L6-v2
+    usage_count     INT DEFAULT 0,                  -- times surfaced in results
+    last_used       TIMESTAMP,
+    indexed_at      TIMESTAMP DEFAULT now(),
+    expires_at      TIMESTAMP                       -- 180-day rolling window
+  );
+  CREATE INDEX idx_embed_vector ON knowledge_embeddings
+    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+  CREATE INDEX idx_embed_source ON knowledge_embeddings(source_type, source_id);
+
+  📋  TABLE: freshworks_tickets
+Local mirror of tickets created via TED. Enables analytics and outcome tracking.
+  CREATE TABLE freshworks_tickets (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id      UUID REFERENCES sessions(id),
+    fw_ticket_id    VARCHAR(100) UNIQUE NOT NULL,   -- Freshworks ticket number
+    subject         TEXT,
+    priority        SMALLINT,                       -- 1=Low 2=Med 3=High 4=Urgent
+    status          VARCHAR(30),                    -- mirrors FW status
+    group_id        VARCHAR(100),                   -- assigned FW group
+    ai_group_suggested VARCHAR(100),               -- what AI suggested
+    group_accepted  BOOLEAN,                        -- did SD accept AI suggestion?
+    resolved_at     TIMESTAMP,
+    resolution_note TEXT,
+    created_at      TIMESTAMP DEFAULT now(),
+    updated_at      TIMESTAMP DEFAULT now()
+  );
+
+  📋  TABLE: loaner_requests
+Tracks loaner device loan transactions initiated at TED kiosk.
+  CREATE TABLE loaner_requests (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id      UUID REFERENCES sessions(id),
+    employee_id     VARCHAR(100) REFERENCES employees(employee_id),
+    device_asset_tag VARCHAR(100) NOT NULL,
+    device_model    VARCHAR(200),
+    fw_sr_id        VARCHAR(100),                   -- Freshworks SR ID
+    loan_start      TIMESTAMP DEFAULT now(),
+    expected_return TIMESTAMP,
+    actual_return   TIMESTAMP,
+    condition_out   VARCHAR(20) DEFAULT 'good',     -- 'good'|'fair'|'damaged'
+    condition_in    VARCHAR(20),                    -- on return
+    damage_noted    BOOLEAN DEFAULT false,
+    sign_off_ts     TIMESTAMP,                      -- employee digital sign-off
+    status          VARCHAR(20) DEFAULT 'active'    -- 'active'|'returned'|'overdue'
+  );
+  CREATE INDEX idx_loaner_employee ON loaner_requests(employee_id);
+  CREATE INDEX idx_loaner_status   ON loaner_requests(status);
+
+  📋  TABLE: offline_queue
+Stores ticket payloads when Freshworks API is unreachable. Processed by background worker on recovery.
+  CREATE TABLE offline_queue (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payload         JSONB NOT NULL,
+    type            VARCHAR(30),                    -- 'ticket'|'asset_update'|'loaner_sr'
+    status          VARCHAR(20) DEFAULT 'pending',  -- 'pending'|'sent'|'failed'
+    retries         SMALLINT DEFAULT 0,
+    last_attempted  TIMESTAMP,
+    error_detail    TEXT,
+    created_at      TIMESTAMP DEFAULT now()
+  );
+
+  📋  TABLE: audit_log
+Immutable append-only log of all kiosk events. Used for compliance and debugging.
+  CREATE TABLE audit_log (
+    id              BIGSERIAL PRIMARY KEY,
+    session_id      UUID,                           -- nullable for system events
+    actor           VARCHAR(100),                   -- employee_id or 'SYSTEM'
+    action          VARCHAR(100) NOT NULL,          -- e.g. 'SESSION_START'
+    detail          JSONB,                          -- contextual data
+    ip_address      INET,
+    created_at      TIMESTAMP DEFAULT now()
+  ) PARTITION BY RANGE (created_at);
+  -- Monthly partitions for performance:
+  CREATE TABLE audit_log_2025_01 PARTITION OF audit_log
+    FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
+
+  📋  TABLE: system_config
+Key-value store for runtime configuration. Updated without redeployment.
+  CREATE TABLE system_config (
+    key             VARCHAR(100) PRIMARY KEY,
+    value           TEXT NOT NULL,
+    description     TEXT,
+    updated_by      VARCHAR(100),
+    updated_at      TIMESTAMP DEFAULT now()
+  );
+  -- Seed values:
+  INSERT INTO system_config VALUES
+    ('llm_provider',       'groq',     'Primary LLM: groq|azure_openai',    'system', now()),
+    ('confidence_threshold','0.80',    'Min confidence for auto-fix',        'system', now()),
+    ('session_timeout_min','5',        'Kiosk inactivity timeout (minutes)', 'system', now()),
+    ('fw_default_group',   'IT_SD',    'Default Freshworks assignment group','system', now()),
+    ('rag_top_k',          '3',        'RAG results returned per query',     'system', now());
+
+3. Redis Schema
+3.1 Key Patterns
+Key Pattern
+Data Structure
+TTL
+session:{uuid}
+Hash — token, employee_id, state, last_action
+15 minutes
+diag_cache:{sha256_of_error}
+String — JSON diagnosis result
+24 hours
+fw_kb:{sha256_of_query}
+String — JSON KB search result
+6 hours
+device:{serial_number}
+String — JSON asset details from FW
+1 hour
+rate:{session_id}
+Counter — API calls this minute
+60 seconds
+offline_mode
+String — 'true'|'false'
+No TTL — manual clear
+job:{uuid}
+Hash — async job status + result
+30 minutes
+
+4. Entity Relationship Summary
+Core relationships between tables:
+employees  ←1:many→  sessions  (one employee, many sessions over time)
+sessions   ←1:many→  diagnosis_results  (one session may have multiple AI runs)
+sessions   ←1:1→     freshworks_tickets  (at most one ticket per session)
+sessions   ←1:1→     loaner_requests  (at most one loaner per session)
+sessions   ←1:many→  audit_log  (many audit events per session)
+error_patterns  — standalone lookup table, no FK relationships
+knowledge_embeddings  — standalone vector store, no FK relationships
+offline_queue  — standalone processing queue
+system_config  — standalone key-value configuration

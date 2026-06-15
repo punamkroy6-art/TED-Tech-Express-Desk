@@ -1,0 +1,239 @@
+﻿
+
+
+
+TED
+Tech Express Desk
+AI-Powered IT Support Kiosk
+Product Requirements Document (PRD)
+
+
+Document Version
+v1.0
+Status
+Draft
+Owner
+IT Operations – AI/ML Team
+Platform
+Physical Kiosk + AI Software
+Integration
+Freshworks ITSM
+
+
+
+CONFIDENTIAL
+
+1. Product Overview
+1.1 Problem Statement
+Employees experiencing IT issues currently rely on logging tickets and waiting for Service Desk (SD) response — a process that is time-consuming and disrupts productivity. Many issues are repetitive and resolvable with guided self-service. There is no on-site, intelligent, walk-up IT support available to employees.
+
+1.2 Product Vision
+TED (Tech Express Desk) is an AI-powered, self-service IT support kiosk installed on-site at office locations. Employees walk up to TED, connect their device, and receive instant AI-driven diagnostics, guided troubleshooting, and resolution — reducing reliance on the Service Desk for common IT issues.
+
+1.3 Product Goals
+Reduce average IT ticket resolution time by enabling instant self-service diagnostics
+Deflect common/repeat IT issues from the Service Desk queue
+Provide AI-assisted, step-by-step guided resolution to employees
+Auto-create Freshworks tickets with pre-populated diagnostic data for unresolved issues
+Enable loaner device dispensing from kiosk locker for hardware failures
+
+2. User Personas
+Persona
+Description
+Primary Need
+End User / Employee
+Office-based staff with IT issues
+Fast, self-service resolution without waiting for SD
+Service Desk Agent (SD)
+IT support staff handling escalated tickets
+Receive pre-diagnosed, data-rich tickets for faster resolution
+IT Manager
+Oversees IT operations and SLA performance
+Visibility into ticket deflection, resolution rates, kiosk usage
+
+3. Core Application Flow
+3.1 Happy Path — Self-Service Resolution
+Employee walks up to TED kiosk at office location
+Employee authenticates (badge tap / SSO login)
+Employee connects device to TED via USB or selects issue type on screen
+TED System Engine runs automated hardware + software diagnostics
+Issue detected → AI Engine activates and attempts auto-fix
+Fix applied → Employee confirms resolution → Session ends
+
+3.2 Escalation Path — SD Ticket Creation
+Issue not detected or not resolved by System Engine
+AI Engine analyses error via screenshot / screen recording
+AI diagnoses error, analyses past tickets and KB articles
+AI provides step-by-step fix recommendation to employee
+Employee attempts fix with AI guidance
+Still unresolved → TED auto-creates Freshworks ticket
+Ticket pre-populated with: diagnostics data, error screenshots, AI analysis, suggested assignment group
+Ticket routed to SD or AI-suggested assignment group (with SD validation before assignment)
+SD resolves issue using AI suggestion, KB, and past resolved tickets
+
+3.3 Loaner Device Path
+Hardware failure confirmed by diagnostic engine
+TED dispenses loaner device from integrated locker unit
+Loaner request auto-logged in Freshworks
+Employee collects device and continues work
+
+4. AI Diagnostic Engine
+4.1 Capabilities
+Hardware diagnostics: CPU, RAM, storage, battery, connectivity
+Software diagnostics: OS errors, driver issues, application crashes
+Visual error analysis via screenshot or screen recording capture
+RAG-based lookup: past resolved tickets + KB articles
+Step-by-step fix generation with confidence scoring
+Smart ticket routing: AI-suggested assignment group based on issue type
+
+4.2 AI Decision Logic
+Condition
+AI Action
+Outcome
+Issue detected by System Engine
+Auto-fix triggered
+Self-resolved — no ticket created
+Issue not auto-fixed, screenshot available
+Visual AI diagnosis
+Step-by-step fix suggested to user
+Fix suggested but user cannot resolve
+Auto-ticket creation
+Freshworks ticket raised with AI data
+Past ticket match found (>80% similarity)
+KB + ticket reference surfaced
+SD guided by historical resolution
+Assignment group unclear
+AI suggests group (SD validates)
+Ticket routed with human sign-off
+
+4.3 Data Sources
+Freshworks ticket history (past resolved tickets)
+Internal Knowledge Base (KB) articles
+Real-time system diagnostic data from connected device
+Error screenshots / screen recordings captured at kiosk
+
+5. Freshworks ITSM Integration
+5.1 Auto-Ticket Creation
+When TED cannot resolve an issue, a Freshworks ticket is automatically created with the following pre-populated data:
+
+Ticket Field
+Source
+Subject
+AI-generated summary of issue
+Description
+Diagnostic results + AI analysis
+Attachments
+Error screenshot / screen recording
+Requester
+Authenticated employee (SSO)
+Priority
+AI-scored based on issue severity
+Assignment Group
+AI-suggested (SD validates before routing)
+KB Suggestions
+Linked KB articles and past tickets
+
+5.2 SD Resolution Options
+Option A: SD resolves directly using AI suggestion + KB + past tickets
+Option B: SD reroutes ticket to AI-suggested assignment group (with validation before assigning)
+
+6. Kiosk Hardware Specification
+6.1 Physical Components
+Component
+Description
+Touch Screen
+Vertical display for employee interaction, AI chat, diagnostic results
+Video / Camera
+Optional: live video connection to SD agent for remote support
+Device Ports
+USB-A, USB-C for device connection and diagnostics
+Locker Unit
+Secure drawers for loaner device storage and dispensing
+Badge Reader
+Employee authentication via access badge
+Network
+Ethernet + Wi-Fi for ITSM and AI engine connectivity
+
+6.2 Placement
+High-traffic office areas: lobbies, IT zones, common areas
+One kiosk per floor / per building (to be determined by site assessment)
+Available during standard office hours; extended hours TBD
+
+7. Non-Functional Requirements
+Category
+Requirement
+Security
+All screen captures encrypted at rest and in transit; access restricted to authorised SD staff
+Privacy
+Employee session data not retained beyond ticket resolution; consent screen shown at kiosk start
+Performance
+Diagnostic scan completes within 60 seconds; AI response within 10 seconds
+Availability
+99.5% uptime target; failover to manual ticket creation if AI unavailable
+Accessibility
+ADA-compliant kiosk height; screen reader support; high-contrast mode
+Audit Logging
+All kiosk sessions logged with timestamp, user ID, actions taken, resolution outcome
+
+8. Success Metrics (KPIs)
+KPI
+Target
+Measurement
+Ticket Deflection Rate
+>30% of kiosk sessions
+Sessions resolved without ticket creation
+Self-Service Resolution Rate
+>25%
+Issues resolved at kiosk without SD involvement
+Avg. Kiosk Session Duration
+<5 minutes
+Time from login to resolution or ticket creation
+AI Diagnosis Accuracy
+>80%
+Correct issue category matched against SD outcome
+SD Resolution Time (TED tickets)
+20% faster vs standard tickets
+Avg. handle time comparison
+Employee Satisfaction (CSAT)
+>4.0 / 5.0
+Post-session survey at kiosk
+
+9. Scope
+9.1 In Scope
+AI-powered hardware and software diagnostics
+Visual error analysis (screenshot / screen recording)
+Step-by-step guided self-service resolution
+Auto Freshworks ticket creation with pre-populated AI data
+KB and past ticket lookup (RAG-based)
+AI-suggested assignment group routing (with SD validation)
+Loaner device dispensing from kiosk locker
+Employee authentication via badge / SSO
+
+9.2 Out of Scope (v1.0)
+Live video call with SD agent (future phase)
+Mobile / remote kiosk access
+Integration with non-Freshworks ITSM platforms
+Automated hardware repair or parts ordering
+
+10. Open Questions
+#
+Question
+Owner
+1
+How many kiosk units are required for Phase 1 rollout?
+IT Manager
+2
+What AI/ML model powers the diagnostic engine?
+AI/ML Team
+3
+What is the loaner device inventory and approval workflow?
+Asset Management
+4
+Which Freshworks tier/plan supports the required API integration?
+IT Operations
+5
+What data retention policy applies to session recordings?
+Legal / Compliance
+6
+Is live video SD support in scope for Phase 2?
+Product Owner

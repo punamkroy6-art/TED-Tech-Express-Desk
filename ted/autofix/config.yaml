@@ -1,0 +1,110 @@
+# TED Auto-Fix Engine — Rule Configuration
+# Each rule defines a condition and the fix steps to apply
+
+thresholds:
+  cpu_percent: 85          # % CPU usage to flag as high
+  memory_percent: 88       # % RAM usage to flag
+  disk_percent: 90         # % disk usage to flag
+  disk_free_gb: 5          # GB free disk to flag
+  battery_percent: 15      # % battery to flag (if applicable)
+
+rules:
+  - id: HIGH_CPU
+    name: "High CPU Usage"
+    category: performance
+    severity: medium
+    trigger:
+      metric: cpu_percent
+      operator: ">"
+      value: 85
+    diagnosis: "Your device CPU is running at high load, causing slowness or freezes."
+    fix_steps:
+      - "Open Task Manager (Ctrl+Shift+Esc) and identify high CPU processes."
+      - "End any unnecessary processes consuming high CPU."
+      - "Disable startup programs: Task Manager > Startup tab."
+      - "Restart the device to clear CPU load."
+    fix_commands:
+      windows:
+        - "taskkill /F /IM OneDrive.exe"      # example — kill known heavy process
+      ssh: []
+
+  - id: HIGH_MEMORY
+    name: "High Memory Usage"
+    category: performance
+    severity: medium
+    trigger:
+      metric: memory_percent
+      operator: ">"
+      value: 88
+    diagnosis: "System memory (RAM) is almost full, causing slowness and application crashes."
+    fix_steps:
+      - "Open Task Manager and find processes using the most memory."
+      - "Close applications you are not currently using."
+      - "Restart the device to free RAM."
+    fix_commands:
+      windows: []
+      ssh: []
+
+  - id: LOW_DISK
+    name: "Low Disk Space"
+    category: storage
+    severity: high
+    trigger:
+      metric: disk_free_gb
+      operator: "<"
+      value: 5
+    diagnosis: "System drive is critically low on free space, which can cause crashes and prevent updates."
+    fix_steps:
+      - "Open Settings > System > Storage to see what's using space."
+      - "Delete Temporary files and empty the Recycle Bin."
+      - "Run Disk Cleanup on the C: drive."
+      - "Contact IT if space is still insufficient — archiving may be required."
+    fix_commands:
+      windows:
+        - "cleanmgr /sagerun:1"
+      ssh: []
+
+  - id: LOW_BATTERY
+    name: "Critical Battery"
+    category: hardware
+    severity: high
+    trigger:
+      metric: battery_percent
+      operator: "<"
+      value: 15
+    diagnosis: "Battery level is critically low — device may shut down unexpectedly."
+    fix_steps:
+      - "Connect your device to a power adapter immediately."
+      - "If charging but not increasing, try a different power cable or adapter."
+      - "If battery does not charge, a loaner device may be available at this kiosk."
+    fix_commands:
+      windows: []
+      ssh: []
+
+  - id: DISK_PERCENT_HIGH
+    name: "Disk Usage Critical"
+    category: storage
+    severity: high
+    trigger:
+      metric: disk_percent
+      operator: ">"
+      value: 90
+    diagnosis: "Disk usage is above 90%, which can severely impact system performance."
+    fix_steps:
+      - "Run Disk Cleanup: search 'Disk Cleanup' in the Start menu."
+      - "Check Downloads folder for large files to delete."
+      - "Uninstall unused applications via Settings > Apps."
+    fix_commands:
+      windows:
+        - "cleanmgr /sagerun:1"
+      ssh: []
+
+ssh:
+  default_port: 22
+  timeout_secs: 10
+  known_hosts_policy: "auto_add"   # auto_add | reject
+
+report:
+  output_dir: "reports"
+  company_name: "Tech Express Desk"
+  logo_text: "TED"

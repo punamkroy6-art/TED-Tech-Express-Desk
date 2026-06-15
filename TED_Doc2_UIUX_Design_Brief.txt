@@ -1,0 +1,236 @@
+﻿
+
+
+TED
+Tech Express Desk
+Document 2 of 5  —  UI/UX Design Brief
+
+
+
+CONFIDENTIAL
+
+1. Design Principles
+TED is a public-facing kiosk used by non-technical employees under stress. The UI must be instantly understandable, calming, and guide the user to resolution with minimum cognitive load.
+
+Principle
+Definition
+Clarity First
+Every screen has ONE clear action. No menus within menus.
+Guided, Not Complex
+Step-by-step always. Never show the user the full system.
+Accessible by Default
+Large text, high contrast, touch targets min 48×48px, ADA compliant.
+Reassuring Tone
+Language is warm and helpful. No technical jargon on employee-facing screens.
+Speed
+No screen should require more than 2 taps to reach its primary action.
+Recoverable
+Every screen has a clear back/cancel option. No dead ends.
+
+2. Design System
+2.1 Colour Palette
+Swatch
+Name
+Hex
+Usage
+ 
+Deep Navy
+#1E3A5F
+Primary brand, headings, nav bar
+ 
+Electric Blue
+#2E75B6
+Buttons, links, active states, progress
+ 
+Sky Blue
+#D6E4F0
+Card backgrounds, info panels
+ 
+Warm Orange
+#E87C2A
+CTAs, warnings, highlights
+ 
+Success Green
+#1A6B3A
+Resolved state, success screens
+ 
+Alert Red
+#CC2200
+Error states, critical warnings
+ 
+Off White
+#F8F9FA
+Screen background
+ 
+Dark Gray
+#333333
+Body text
+
+2.2 Typography
+Element
+Font
+Size
+Weight
+Screen Title
+Inter / Arial
+40–48px
+Bold
+Section Heading
+Inter / Arial
+28–32px
+SemiBold
+Body Text
+Inter / Arial
+20–22px
+Regular
+Button Label
+Inter / Arial
+22px
+Bold
+Caption / Helper
+Inter / Arial
+16–18px
+Regular
+Error Code (mono)
+Courier New
+18px
+Regular
+
+2.3 Component Specs
+Primary Button: 320px wide × 72px tall, Electric Blue fill, white bold text, 8px border radius, 4px shadow
+Secondary Button: same size, transparent fill, Electric Blue border, Electric Blue text
+Destructive Button: same size, Alert Red fill, white text — used only for 'Cancel Session'
+Input Field: full width, 64px tall, 2px border (#CCCCCC), 4px focus ring (#2E75B6), 20px font
+Card: white background, 8px border radius, 1px border (#E0E0E0), 16px padding, 4px shadow
+Progress Bar: full width, 12px tall, Electric Blue fill, Sky Blue track, animated fill
+Step Checkbox: 48×48px, Electric Blue on check, label text 20px regular
+Toast Notification: 400px wide, bottom-centre, 8px radius, auto-dismiss 4 seconds
+
+3. Screen Inventory & Wireframes
+3.1 Idle / Welcome Screen
+⬜  Screen: IDLE — Welcome
+Full screen. Kiosk waiting for employee. Animated pulse on touch prompt.
+  •  TED logo centred, large (120px)
+  •  Headline: 'Hello. How can I help you today?' — 40px, white on navy background
+  •  Subtext: 'Tap your badge or touch the screen to get started' — 22px
+  •  Animated badge icon (pulse effect) — bottom centre
+  •  Clock + site name — top right, 18px
+
+⬜  Screen: AUTH — Login
+Employee authenticates. Auto-advance on badge success.
+  •  Heading: 'Welcome back, [Name]' (if badge recognised) OR 'Please sign in'
+  •  Badge tap zone: large highlighted circle, 200px, animated ring
+  •  Divider: 'OR'
+  •  SSO button: 'Sign in with your company account' — primary button style
+  •  Back link: 'Cancel' — small, bottom left
+
+3.2 Home Screen
+⬜  Screen: HOME — Choose Action
+Two large option cards. Clean, no clutter.
+  •  Greeting: 'Hi [Name] — What do you need help with today?' — 32px
+  •  Card 1: 'Fix an IT Issue' — icon: laptop with wrench, Electric Blue card
+  •  Card 2: 'Get a Loaner Device' — icon: device exchange, Navy card
+  •  Both cards: 200px tall, full width, icon 64px, label 28px bold, white text
+  •  Footer: 'Session will timeout in 5 minutes' — 16px gray
+
+3.3 Diagnostic Flow Screens
+⬜  Screen: DIAGNOSE — Connect Device
+Prompt to connect device or describe issue.
+  •  Heading: 'Let's figure out what's wrong'
+  •  Option A: 'Connect your device' — illustrated USB cable icon, large tap zone
+  •  Option B: 'Describe your issue' — text area, placeholder: 'e.g. My laptop won't connect to VPN'
+  •  Both options visible simultaneously — top/bottom split layout
+  •  Next button: enabled when either input provided
+
+⬜  Screen: SCANNING — Running Diagnostics
+Progress screen while AI engine runs.
+  •  Animated circular progress indicator — Electric Blue, 120px
+  •  Status text updates every 3 seconds: 'Checking OS...' → 'Scanning drivers...' → 'Analysing error...'
+  •  Background: Navy gradient
+  •  Do not show cancel during scan — show 'Please wait...' instead
+  •  Timeout fallback at 30s: 'Taking longer than expected...' + option to describe issue manually
+
+⬜  Screen: RESULT — Fix Steps
+AI diagnosis and step-by-step resolution guide.
+  •  Header: 'We found the issue' — Success Green heading if confident, Amber if low confidence
+  •  Diagnosis summary: 1–2 sentences, plain English, 22px
+  •  Fix steps: numbered list, each step in a card with checkbox, 20px text
+  •  KB reference links: 'Helpful article: [title]' — collapsible section
+  •  Two buttons at bottom: 'This fixed it ✓' (Success Green) and 'Still not working' (Outline)
+  •  Progress: 'Step X of Y' shown above steps
+
+⬜  Screen: ESCALATE — Ticket Created
+Confirmation after ticket auto-creation.
+  •  Icon: envelope with checkmark — 80px, Electric Blue
+  •  Heading: 'Your ticket has been raised'
+  •  Ticket number displayed: large, bold, monospace font
+  •  Body: 'A member of the IT team will contact you within [SLA time]. Check your email for updates.'
+  •  CSAT prompt: 'How was your experience?' — 5-star rating
+  •  Auto-return to idle after 30 seconds (countdown shown)
+
+3.4 Loaner Flow Screens
+⬜  Screen: LOANER — Device Selection
+Show available loaner devices.
+  •  Heading: 'Available Devices'
+  •  Device cards: model name, specs summary, availability badge (green dot = available)
+  •  Each card: 140px tall, image placeholder left, specs right, 'Select' button
+  •  If none available: empty state illustration + 'Join waitlist' CTA
+
+⬜  Screen: LOANER — Condition Sign-Off
+Employee acknowledges device condition.
+  •  Heading: 'Please review device condition'
+  •  Condition statement: 'This device has been checked and is in good condition.'
+  •  Note: 'You will be responsible for any new damage during the loan period.'
+  •  Digital signature area OR large 'I Agree' primary button
+  •  Return date prominently displayed: 'Return by: [date]'
+
+
+4. Interaction Design
+4.1 Touch Targets
+Minimum touch target size: 48×48px (WCAG 2.1 AA)
+Primary actions: minimum 72px tall buttons
+Spacing between adjacent targets: minimum 16px
+No hover states — all interactions are tap/press only
+
+4.2 Animations & Transitions
+Screen transitions: slide-in from right (forward), slide-in from left (back) — 250ms ease
+Loading states: pulse animation on skeleton screens
+Success state: check icon scale-in with green fill — 300ms
+Error state: gentle shake animation on error field — 200ms
+Idle screensaver: slow fade-in of animated TED logo loop
+
+4.3 Feedback & Tone of Voice
+Situation
+❌ Don't Use
+✅ Use Instead
+Error message
+Error: API_TIMEOUT_503
+Something went wrong. Let's try again.
+Diagnosis result
+Issue: DLL_LOAD_FAILURE
+Your VPN software needs to be reinstalled.
+Escalation
+Ticket #INC123 created
+We've let the IT team know. Ticket #INC123.
+Loading
+Processing...
+Checking your system — just a moment...
+Success
+Resolution completed
+Great — that should fix it!
+
+5. Accessibility Requirements
+WCAG 2.1 Level AA compliance minimum
+Colour contrast ratio: minimum 4.5:1 for all body text
+Screen reader support: all interactive elements have aria-label attributes
+Font size: minimum 18px on all employee-facing text
+Kiosk height: ADA-compliant (primary content within 750mm–1200mm from floor)
+High-contrast mode: toggle available in settings — inverts to black/white scheme
+No time-limited interactions except session timeout (which is extendable)
+
+6. Responsive Behaviour
+Primary target: 1080×1920px (portrait 1080p touchscreen). Secondary: 1080×1920 at 150% scale for accessibility mode.
+All layouts use flexbox column — single column, full width
+No horizontal scrolling permitted on any screen
+Images and icons: SVG format — scale cleanly at all sizes
+Keyboard input (for manual text entry): virtual keyboard slides up from bottom, does not obscure input field

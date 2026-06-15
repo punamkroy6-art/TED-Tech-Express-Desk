@@ -1,0 +1,15 @@
+# TED Auto-Fix Engine — Python Dependencies
+# Install: pip install -r requirements.txt
+
+# Core (required)
+psutil>=5.9          # Hardware metrics (CPU, memory, disk, temperature)
+pyyaml>=6.0          # config.yaml support
+
+# SSH-based remote fix execution
+paramiko>=3.0
+
+# Word document incident reports
+python-docx>=1.1
+
+# Optional: LLM-powered diagnostic reasoning (future extension)
+# anthropic>=0.25

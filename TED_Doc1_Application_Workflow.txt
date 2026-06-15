@@ -1,0 +1,197 @@
+﻿
+
+
+TED
+Tech Express Desk
+Document 1 of 5  —  Application Workflow
+
+
+Version
+v1.0
+Flows Covered
+3 primary + 2 edge case
+
+
+
+CONFIDENTIAL
+
+1. Overview — All Application Flows
+TED operates across five distinct workflows. Each is documented below with step-by-step logic, decision points, and system interactions.
+
+#
+Flow Name
+Trigger
+1
+Software Issue — Self-Service
+Employee connects device, issue auto-detected
+2
+Software Issue — SD Escalation
+AI cannot resolve; ticket auto-created
+3
+Loaner Device Request
+Employee requests temporary replacement device
+4
+Session Timeout / Abandoned
+Employee leaves kiosk mid-session
+5
+Offline / Degraded Mode
+Backend or Freshworks API unreachable
+
+Flow 1 — Software Issue: Self-Service Resolution
+Triggered when an employee connects their device or describes an issue. The AI engine resolves without SD involvement.
+
+1
+Employee Approaches Kiosk
+Walks up to TED kiosk at office location. Idle screen is active.
+▼
+2
+Authentication
+Employee taps badge on RFID reader OR selects SSO login on screen. JWT token issued. Employee name + department pre-loaded.
+▼
+3
+Issue Entry
+Employee selects: 'I have a problem' → connects device via USB-C/USB-A OR selects issue category from menu (Software / Hardware / Network / Other).
+▼
+4
+Automated Diagnostics
+TED System Engine runs: OS version check, driver scan, error log read, network ping test. PaddleOCR captures any visible error messages on connected screen.
+▼
+◆  DECISION: Issue detected in error database with confidence >80%?
+  YES → Proceed to Step 5 (auto-fix)
+  NO  → Proceed to Flow 2 (escalation)
+▼
+5
+AI Fix Generation
+LLM generates numbered step-by-step fix. KB articles and past resolved tickets surfaced as reference. Fix displayed on kiosk touchscreen.
+▼
+6
+Employee Attempts Fix
+Employee follows steps on screen. Each step has a checkbox. Timer shows estimated completion time.
+▼
+◆  DECISION: Issue resolved? Employee confirms on screen.
+  YES → Proceed to Step 7 (success)
+  NO  → Return to Step 4 with additional context → if still fails, go to Flow 2
+▼
+7
+Resolution Confirmed
+Success screen shown. CSAT rating prompt (1–5 stars). Session outcome logged as 'resolved'. No ticket created.
+▼
+8
+Session End
+JWT invalidated. Temp session data purged from Redis. Audit log entry written. Kiosk returns to idle.
+
+Flow 2 — Software Issue: SD Escalation
+Triggered when AI confidence is below threshold or employee cannot follow the fix. A Freshworks ticket is auto-created with full diagnostic context.
+
+1
+Escalation Triggered
+AI confidence <50% OR employee marks fix as 'Did not work' after Flow 1 Step 6.
+▼
+2
+Visual Capture
+Kiosk prompts employee: 'Allow screenshot?' Employee consents. PaddleOCR re-runs on captured image. Error codes and text extracted into structured JSON.
+▼
+3
+Deep AI Diagnosis
+LLM receives: error text + device info + diagnostic results + OCR output. RAG pipeline queries vector DB — top 3 matching past tickets and KB articles retrieved. LLM generates root cause summary + suggested assignment group.
+▼
+4
+Show Diagnosis to Employee
+Screen shows: 'Here is what we found' — plain-language summary. Suggested fix steps displayed. Employee attempts one final time with AI guidance.
+▼
+◆  DECISION: Employee resolves issue?
+  YES → Go to Flow 1 Step 7 (success)
+  NO  → Proceed to Step 5 (ticket creation)
+▼
+5
+Ticket Auto-Creation
+POST to Freshworks API. Ticket pre-populated: subject, description, AI diagnosis, screenshots, device serial, priority score, suggested assignment group.
+▼
+6
+SD Validation & Routing
+Ticket appears in SD queue. SD agent reviews AI-suggested assignment group. SD validates and routes (or reassigns if needed). SD resolves using AI fix suggestion + KB links.
+▼
+7
+Employee Notified
+Kiosk screen shows ticket reference number and estimated response time. Employee receives Freshworks email notification.
+▼
+8
+Session End
+JWT invalidated. Screenshots moved to Freshworks attachment then purged locally. Audit log written. Kiosk returns to idle.
+
+Flow 3 — Loaner Device Request
+Employee needs a temporary replacement device. TED logs the request, opens the locker, and records the transaction in Freshworks.
+
+1
+Authentication
+Employee authenticates via badge or SSO.
+▼
+2
+Select Loaner
+Employee selects 'Request Loaner Device' on home screen. Available device types shown (laptop model, specs).
+▼
+◆  DECISION: Loaner device available in locker?
+  YES → Proceed to Step 3
+  NO  → Show 'No devices available' screen → offer to raise waitlist SR in Freshworks
+▼
+3
+Locker Opens
+Electronic lock released. LED lighting activates inside compartment. Kiosk screen shows: 'Please collect your device from the locker.'
+▼
+4
+Employee Collects Device
+Employee removes device from locker. Sensor confirms removal. Employee signs digital condition acknowledgement on screen.
+▼
+5
+Freshworks SR Auto-Created
+Loaner service request raised: employee ID, device asset tag, loan start datetime, expected return date, condition at loan (logged as 'Good — unscanned' in this software-only phase).
+▼
+6
+Session End + Reminder Set
+Kiosk confirms SR number. Return reminder email scheduled in Freshworks. Audit log written. CMDB asset custodian updated.
+
+Flow 4 — Session Timeout / Abandoned
+Employee leaves kiosk without completing the session.
+
+1
+Inactivity Detected
+No touchscreen interaction for 2 minutes during active session.
+▼
+2
+Warning Banner
+'Are you still there?' overlay shown. 30-second countdown timer starts. Employee can tap to continue.
+▼
+◆  DECISION: Employee responds within 30 seconds?
+  YES → Session resumes from current state
+  NO  → Proceed to Step 3 (auto-close)
+▼
+3
+Session Auto-Closed
+JWT invalidated. Temp data purged. If diagnosis was in progress and ticket not yet created: outcome logged as 'abandoned'. No ticket raised. Audit entry written.
+▼
+4
+Kiosk Returns to Idle
+Screensaver activates. All session state cleared from Redis and UI.
+
+Flow 5 — Offline / Degraded Mode
+Backend API or Freshworks is unreachable. TED provides minimal functionality.
+
+1
+Connectivity Check Fails
+FastAPI health check returns timeout OR Freshworks API returns 5xx on startup ping.
+▼
+2
+Degraded Mode Activated
+Banner shown on kiosk: 'AI diagnostics temporarily unavailable. You can still raise a ticket manually.'
+▼
+3
+Manual Ticket Form
+Employee fills in: name (pre-filled from badge), issue description, priority (Low/Medium/High/Urgent). Form submitted and stored in PostgreSQL offline_queue table.
+▼
+4
+Connectivity Restored
+Background service polls FastAPI health endpoint every 30 seconds. On recovery: offline_queue flushed to Freshworks automatically.
+▼
+5
+Employee Notified
+If employee still at kiosk: success confirmation shown with ticket number. If session ended: Freshworks sends email confirmation.

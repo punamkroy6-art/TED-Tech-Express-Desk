@@ -1,0 +1,20 @@
+# TED Auto-Fix Engine — Device Configuration
+# ─────────────────────────────────────────────
+# Copy this file and edit values for each device.
+# Run: python ted_autofix_engine.py --config config.yaml
+
+device_id: "TED-001"
+host: "192.168.1.50"          # Device IP address
+
+# SSH access (for remote fix commands)
+ssh_port: 22
+ssh_user: "admin"
+ssh_key: ""                   # Path to private key, e.g. "~/.ssh/ted_rsa"
+
+# REST API
+api_port: 8080
+api_token: ""                 # Bearer token for device API
+
+# Engine behaviour
+poll_interval_sec: 30         # How often to scan (seconds)
+report_output_dir: "./reports"

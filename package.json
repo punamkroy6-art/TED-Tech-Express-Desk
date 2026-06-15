@@ -1,0 +1,7 @@
+{
+  "name": "ted-project",
+  "private": true,
+  "scripts": {
+    "dev": "cd ted/frontend && npm run dev -- --port 4173"
+  }
+}

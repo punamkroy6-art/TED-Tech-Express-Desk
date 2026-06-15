@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($py = \"C:\\\\Users\\\\RoyPunam\\\\Desktop\\\\TED PROJECT-Vision AI\\\\ted\\\\python\\\\python.exe\"; & $py -c \"import groq; print\\('groq ok'\\)\" 2>&1; & $py -c \"import pydantic_settings; print\\('pydantic_settings ok'\\)\" 2>&1; & $py -c \"import uvicorn; print\\('uvicorn ok'\\)\" 2>&1)",
+      "Bash(curl -s -X POST http://localhost:8000/api/diagnose -H 'Content-Type: application/json' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJFTVAwMDEiLCJzZXNzaW9uX2lkIjoiOTE5Yjg0ZWEtYmFhYi00OTUwLTg5YjQtZWUyZjk0MjgwZGIyIiwiZXhwIjoxNzgxNTM2OTcxfQ.1f-tFb1yCRYTMDvsL9YatiQEQh4GmObi_eFFkQXpcug' --data-raw '{\"error_text\":\"My laptop wifi keeps disconnecting and I cannot stay connected to the internet\",\"device_info\":{\"os\":\"Windows 11\"}}')",
+      "Bash(curl -sv -X POST http://localhost:8000/api/ticket -H 'Content-Type: application/json' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJFTVAwMDEiLCJzZXNzaW9uX2lkIjoiOTE5Yjg0ZWEtYmFhYi00OTUwLTg5YjQtZWUyZjk0MjgwZGIyIiwiZXhwIjoxNzgxNTM2OTcxfQ.1f-tFb1yCRYTMDvsL9YatiQEQh4GmObi_eFFkQXpcug' --data-raw '{\"device_serial\":\"\"}')",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(mkdir -p \"/c/Users/RoyPunam/Desktop/TED PROJECT-Vision AI/.claude\")",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s http://localhost:8000/api/health)",
+      "Bash(USE_LOCAL_MOCK=true DATABASE_URL=sqlite+aiosqlite:///./ted.db JWT_SECRET=test-secret JWT_ALGORITHM=HS256 \"/mnt/c/Users/RoyPunam/Desktop/TED PROJECT-Vision AI/ted/python/python.exe\" seed_data.py)",
+      "Bash(curl -s -X POST http://localhost:8000/api/auth/session -H 'Content-Type: application/json' --data-raw '{\"employee_id\":\"EMP-1029\",\"display_name\":\"Alice Vance\",\"kiosk_id\":\"KIOSK-001\",\"auth_method\":\"sso\"}')",
+      "Bash(python3 -m json.tool)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000\" -UseBasicParsing -TimeoutSec 5)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp"
+    ]
+  }
+}

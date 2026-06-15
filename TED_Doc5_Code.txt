@@ -1,0 +1,501 @@
+﻿
+
+
+TED
+Tech Express Desk
+Document 5 of 5  —  Code
+Starter codebase — FastAPI backend + React UI scaffolding
+
+
+
+CONFIDENTIAL
+
+1. Project Structure
+  ted/
+  ├── backend/
+  │   ├── app/
+  │   │   ├── main.py              # FastAPI app entry point
+  │   │   ├── config.py            # Settings and env vars
+  │   │   ├── database.py          # PostgreSQL + Redis connections
+  │   │   ├── models/              # SQLAlchemy ORM models
+  │   │   │   ├── session.py
+  │   │   │   ├── employee.py
+  │   │   │   ├── diagnosis.py
+  │   │   │   ├── error_pattern.py
+  │   │   │   └── audit_log.py
+  │   │   ├── routers/             # FastAPI route handlers
+  │   │   │   ├── auth.py
+  │   │   │   ├── diagnose.py
+  │   │   │   ├── ocr.py
+  │   │   │   ├── ticket.py
+  │   │   │   ├── loaner.py
+  │   │   │   └── health.py
+  │   │   ├── services/            # Business logic
+  │   │   │   ├── ai_engine.py
+  │   │   │   ├── rag_service.py
+  │   │   │   ├── ocr_service.py
+  │   │   │   ├── freshworks.py
+  │   │   │   └── auth_service.py
+  │   │   └── middleware/
+  │   │       ├── auth.py
+  │   │       └── logging.py
+  │   ├── migrations/              # Alembic migrations
+  │   ├── tests/
+  │   ├── Dockerfile
+  │   └── requirements.txt
+  ├── frontend/
+  │   ├── src/
+  │   │   ├── App.tsx
+  │   │   ├── store/               # Zustand state
+  │   │   │   └── sessionStore.ts
+  │   │   ├── screens/
+  │   │   │   ├── IdleScreen.tsx
+  │   │   │   ├── AuthScreen.tsx
+  │   │   │   ├── HomeScreen.tsx
+  │   │   │   ├── DiagnoseScreen.tsx
+  │   │   │   ├── ScanningScreen.tsx
+  │   │   │   ├── ResultScreen.tsx
+  │   │   │   ├── EscalateScreen.tsx
+  │   │   │   └── LoanerScreen.tsx
+  │   │   ├── components/          # Shared UI components
+  │   │   └── api/                 # API client layer
+  │   └── package.json
+  └── docker-compose.yml
+
+2. Backend — Core Files
+2.1 main.py — FastAPI Entry Point
+  📄  backend/app/main.py
+  from fastapi import FastAPI
+  from fastapi.middleware.cors import CORSMiddleware
+  from slowapi import Limiter, _rate_limit_exceeded_handler
+  from slowapi.util import get_remote_address
+  from slowapi.errors import RateLimitExceeded
+  from prometheus_fastapi_instrumentator import Instrumentator
+  
+  from app.routers import auth, diagnose, ocr, ticket, loaner, health
+  from app.middleware.logging import RequestLoggingMiddleware
+  from app.database import init_db
+  
+  limiter = Limiter(key_func=get_remote_address)
+  
+  app = FastAPI(
+      title="TED API",
+      description="Tech Express Desk — AI IT Support Kiosk",
+      version="1.0.0"
+  )
+  
+  app.state.limiter = limiter
+  app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+  
+  app.add_middleware(CORSMiddleware,
+      allow_origins=["http://localhost:3000"],
+      allow_credentials=True,
+      allow_methods=["*"],
+      allow_headers=["*"])
+  
+  app.add_middleware(RequestLoggingMiddleware)
+  
+  app.include_router(auth.router,     prefix='/api/auth',    tags=['Auth'])
+  app.include_router(diagnose.router, prefix='/api',         tags=['Diagnose'])
+  app.include_router(ocr.router,      prefix='/api',         tags=['OCR'])
+  app.include_router(ticket.router,   prefix='/api',         tags=['Ticket'])
+  app.include_router(loaner.router,   prefix='/api',         tags=['Loaner'])
+  app.include_router(health.router,   prefix='/api',         tags=['Health'])
+  
+  Instrumentator().instrument(app).expose(app)
+  
+  @app.on_event('startup')
+  async def startup(): await init_db()
+
+2.2 config.py — Settings
+  📄  backend/app/config.py
+  from pydantic_settings import BaseSettings
+  
+  class Settings(BaseSettings):
+      # Database
+      database_url: str
+      redis_url: str = 'redis://redis:6379'
+  
+      # Auth
+      jwt_secret: str
+      jwt_algorithm: str = 'RS256'
+      jwt_expiry_minutes: int = 15
+  
+      # LLM
+      groq_api_key: str
+      groq_model: str = 'llama-3.3-70b-versatile'
+      azure_openai_key: str = ''
+      llm_timeout_secs: int = 10
+  
+      # Freshworks
+      freshworks_domain: str
+      freshworks_api_key: str
+  
+      # RAG
+      confidence_threshold: float = 0.80
+      rag_top_k: int = 3
+  
+      class Config:
+          env_file = '.env'
+  
+  settings = Settings()
+
+2.3 ai_engine.py — Diagnostic Engine
+  📄  backend/app/services/ai_engine.py
+  import hashlib, json
+  from groq import Groq
+  from app.config import settings
+  from app.database import get_db, get_redis
+  from app.services.rag_service import search_knowledge_base
+  
+  client = Groq(api_key=settings.groq_api_key)
+  
+  SYSTEM_PROMPT = '''You are an expert IT support engineer.
+  Given an error description and device info, provide:
+  1. A plain-English diagnosis (1-2 sentences)
+  2. Numbered step-by-step fix instructions
+  3. A suggested IT assignment group if escalation needed
+  Be concise. No jargon. Max 5 fix steps.'''
+  
+  async def run_diagnosis(session_id: str, payload: dict) -> dict:
+      # 1. Check Redis cache
+      cache_key = f'diag_cache:{_hash(payload["error_text"])}'
+      redis = await get_redis()
+      cached = await redis.get(cache_key)
+      if cached:
+          return json.loads(cached)
+  
+      # 2. Rule-based match first
+      rule_result = await _rule_match(payload['error_text'], payload.get('device_info', {}))
+      if rule_result['confidence'] >= settings.confidence_threshold:
+          await redis.setex(cache_key, 86400, json.dumps(rule_result))
+          return rule_result
+  
+      # 3. RAG lookup
+      rag_context = await search_knowledge_base(payload['error_text'])
+  
+      # 4. LLM inference
+      result = await _llm_diagnose(payload, rag_context)
+      await redis.setex(cache_key, 86400, json.dumps(result))
+      return result
+  
+  async def _rule_match(error_text: str, device_info: dict) -> dict:
+      async with get_db() as db:
+          rows = await db.fetch(
+              '''SELECT *, ts_rank(to_tsvector(array_to_string(keywords,' ')),
+                 plainto_tsquery($1)) AS rank
+                 FROM error_patterns WHERE is_active = true
+                 ORDER BY rank DESC LIMIT 1''', error_text)
+      if not rows or rows[0]['rank'] < 0.1:
+          return {'confidence': 0.0, 'action': 'create_ticket'}
+      row = rows[0]
+      return {
+          'diagnosis': row['description'],
+          'confidence': min(float(row['rank']) * 1.5, 1.0),
+          'severity': row['severity'],
+          'fix_steps': row['fix_steps'],
+          'suggested_group': 'IT_SD',
+          'action': 'self_resolve' if float(row['rank']) > 0.8 else 'guided_fix'
+      }
+  
+  async def _llm_diagnose(payload: dict, rag_context: list) -> dict:
+      context_str = '\n'.join([f'- {r["title"]}: {r["resolution"]}' for r in rag_context])
+      user_msg = f'''Error: {payload.get("error_text","")}
+  Device: {json.dumps(payload.get("device_info",{}))}
+  Similar past resolutions:\n{context_str}'''
+      try:
+          resp = client.chat.completions.create(
+              model=settings.groq_model,
+              messages=[
+                  {'role':'system','content':SYSTEM_PROMPT},
+                  {'role':'user','content':user_msg}
+              ],
+              max_tokens=1000, temperature=0.2,
+              timeout=settings.llm_timeout_secs
+          )
+          return _parse_llm_response(resp.choices[0].message.content)
+      except Exception:
+          return {'confidence': 0.3, 'action': 'create_ticket',
+                  'diagnosis': 'Unable to diagnose automatically.', 'fix_steps': []}
+  
+  def _parse_llm_response(text: str) -> dict:
+      lines = text.strip().split('\n')
+      fix_steps = [l.strip() for l in lines if l.strip() and l[0].isdigit()]
+      return {'diagnosis': lines[0] if lines else '',
+              'confidence': 0.65, 'severity': 'medium',
+              'fix_steps': fix_steps, 'action': 'guided_fix',
+              'suggested_group': 'IT_SD'}
+  
+  def _hash(text: str) -> str:
+      return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+2.4 freshworks.py — Freshworks Service
+  📄  backend/app/services/freshworks.py
+  import httpx, asyncio, json
+  from app.config import settings
+  from app.database import get_db
+  
+  BASE_URL = f'https://{settings.freshworks_domain}/api/v2'
+  HEADERS = {
+      'Content-Type': 'application/json',
+      'Authorization': f'Basic {settings.freshworks_api_key}'
+  }
+  
+  async def create_ticket(session_id: str, diagnosis: dict,
+                          employee: dict, device_serial: str) -> dict:
+      payload = {
+          'subject': f'[TED] {diagnosis.get("diagnosis","IT Issue")[:80]}',
+          'description': _build_description(diagnosis, device_serial),
+          'requester_id': employee.get('freshworks_id'),
+          'priority': _score_to_priority(diagnosis.get('severity','medium')),
+          'status': 2,
+          'group_id': None,
+          'custom_fields': {
+              'kiosk_session_id': session_id,
+              'ai_confidence': diagnosis.get('confidence', 0),
+              'device_serial': device_serial,
+              'ai_suggested_group': diagnosis.get('suggested_group',''),
+          }
+      }
+      return await _post_with_retry('/tickets', payload)
+  
+  async def _post_with_retry(endpoint: str, payload: dict,
+                              retries: int = 3) -> dict:
+      delay = 2
+      async with httpx.AsyncClient(timeout=15) as client:
+          for attempt in range(retries):
+              try:
+                  r = await client.post(f'{BASE_URL}{endpoint}',
+                                        headers=HEADERS, json=payload)
+                  if r.status_code == 429:
+                      await asyncio.sleep(delay); delay *= 2; continue
+                  r.raise_for_status()
+                  return r.json()
+              except httpx.HTTPStatusError as e:
+                  if attempt == retries - 1:
+                      await _queue_offline(endpoint, payload)
+                      raise
+                  await asyncio.sleep(delay); delay *= 2
+  
+  async def _queue_offline(endpoint: str, payload: dict):
+      async with get_db() as db:
+          await db.execute(
+              'INSERT INTO offline_queue (payload, type) VALUES ($1, $2)',
+              json.dumps({'endpoint': endpoint, 'payload': payload}), 'ticket')
+  
+  def _score_to_priority(severity: str) -> int:
+      return {'low':1,'medium':2,'high':3,'critical':4}.get(severity, 2)
+  
+  def _build_description(diagnosis: dict, serial: str) -> str:
+      steps = '\n'.join([f'{i+1}. {s}'
+                         for i,s in enumerate(diagnosis.get('fix_steps',[]))])
+      return (f'AI Diagnosis: {diagnosis.get("diagnosis","")}\n\n'
+              f'Fix Steps Attempted:\n{steps}\n\n'
+              f'Device Serial: {serial}\n'
+              f'AI Confidence: {diagnosis.get("confidence",0):.0%}')
+
+3. Frontend — Core Files
+3.1 sessionStore.ts — Zustand State
+  📄  frontend/src/store/sessionStore.ts
+  import { create } from 'zustand'
+  
+  export type Screen = 'IDLE'|'AUTH'|'HOME'|'DIAGNOSE'|
+    'SCANNING'|'RESULT'|'ESCALATE'|'LOANER'|'OFFLINE'|'ERROR'
+  
+  interface DiagnosisResult {
+    diagnosis: string
+    confidence: number
+    severity: string
+    fix_steps: string[]
+    kb_references: Array<{id:string; title:string; url:string}>
+    action: string
+    suggested_group: string
+  }
+  
+  interface SessionStore {
+    screen: Screen
+    token: string | null
+    employee: { id:string; name:string; dept:string } | null
+    diagnosis: DiagnosisResult | null
+    ticketId: string | null
+    isOffline: boolean
+    // Actions
+    setScreen: (s: Screen) => void
+    setAuth: (token:string, employee:SessionStore['employee']) => void
+    setDiagnosis: (d: DiagnosisResult) => void
+    setTicketId: (id: string) => void
+    setOffline: (v: boolean) => void
+    reset: () => void
+  }
+  
+  const initialState = {
+    screen: 'IDLE' as Screen,
+    token: null, employee: null,
+    diagnosis: null, ticketId: null, isOffline: false
+  }
+  
+  export const useSession = create<SessionStore>((set) => ({
+    ...initialState,
+    setScreen: (screen) => set({ screen }),
+    setAuth: (token, employee) => set({ token, employee, screen: 'HOME' }),
+    setDiagnosis: (diagnosis) => set({ diagnosis }),
+    setTicketId: (ticketId) => set({ ticketId }),
+    setOffline: (isOffline) => set({ isOffline }),
+    reset: () => set(initialState),
+  }))
+
+3.2 ResultScreen.tsx — Fix Steps UI
+  📄  frontend/src/screens/ResultScreen.tsx
+  import { useState } from 'react'
+  import { useSession } from '../store/sessionStore'
+  import { api } from '../api/client'
+  
+  export default function ResultScreen() {
+    const { diagnosis, token, setScreen, setTicketId } = useSession()
+    const [checked, setChecked] = useState<boolean[]>(
+      Array(diagnosis?.fix_steps.length ?? 0).fill(false))
+    const [submitting, setSubmitting] = useState(false)
+  
+    const handleResolved = async () => {
+      await api.post('/api/session/outcome', { outcome: 'resolved' },
+        { headers: { Authorization: `Bearer ${token}` } })
+      setScreen('IDLE')
+    }
+  
+    const handleNotFixed = async () => {
+      setSubmitting(true)
+      try {
+        const res = await api.post('/api/ticket', {},
+          { headers: { Authorization: `Bearer ${token}` } })
+        setTicketId(res.data.ticket_id)
+        setScreen('ESCALATE')
+      } finally { setSubmitting(false) }
+    }
+  
+    if (!diagnosis) return null
+    return (
+      <div className='flex flex-col h-screen bg-gray-50 p-8'>
+        <h1 className='text-4xl font-bold text-[#1E3A5F] mb-2'>
+          We found the issue
+        </h1>
+        <p className='text-xl text-gray-600 mb-8'>{diagnosis.diagnosis}</p>
+        <div className='flex flex-col gap-4 flex-1 overflow-y-auto'>
+          {diagnosis.fix_steps.map((step, i) => (
+            <div key={i} className='flex items-start gap-4 bg-white
+                 rounded-lg p-5 border border-gray-200 shadow-sm'>
+              <input type='checkbox' checked={checked[i]}
+                onChange={() => setChecked(c => {
+                  const n=[...c]; n[i]=!n[i]; return n})}
+                className='w-8 h-8 mt-1 accent-[#2E75B6]' />
+              <div>
+                <span className='font-semibold text-[#2E75B6]'>
+                  Step {i+1}</span>
+                <p className='text-xl text-gray-700 mt-1'>{step}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className='flex gap-4 mt-8'>
+          <button onClick={handleResolved}
+            className='flex-1 h-20 text-2xl font-bold rounded-lg
+            bg-[#1A6B3A] text-white'>
+            This fixed it ✓
+          </button>
+          <button onClick={handleNotFixed} disabled={submitting}
+            className='flex-1 h-20 text-2xl font-bold rounded-lg
+            border-2 border-[#2E75B6] text-[#2E75B6] bg-white'>
+            {submitting ? 'Raising ticket...' : 'Still not working'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+4. Infrastructure
+4.1 docker-compose.yml
+  📄  docker-compose.yml
+  version: '3.9'
+  services:
+    db:
+      image: pgvector/pgvector:pg16
+      environment:
+        POSTGRES_DB: ted
+        POSTGRES_USER: ted_user
+        POSTGRES_PASSWORD: ${DB_PASSWORD}
+      volumes:
+        - pgdata:/var/lib/postgresql/data
+      restart: unless-stopped
+  
+    redis:
+      image: redis:7-alpine
+      command: redis-server --requirepass ${REDIS_PASSWORD}
+      restart: unless-stopped
+  
+    backend:
+      build: ./backend
+      env_file: .env
+      ports:
+        - '8000:8000'
+      depends_on: [db, redis]
+      restart: unless-stopped
+      healthcheck:
+        test: ['CMD', 'curl', '-f', 'http://localhost:8000/api/health']
+        interval: 30s
+        timeout: 10s
+        retries: 3
+  
+    frontend:
+      build: ./frontend
+      ports:
+        - '3000:80'
+      depends_on: [backend]
+      restart: unless-stopped
+  
+  volumes:
+    pgdata:
+
+4.2 requirements.txt
+  📄  backend/requirements.txt
+  fastapi==0.111.0
+  uvicorn[standard]==0.30.0
+  pydantic-settings==2.3.0
+  asyncpg==0.29.0
+  sqlalchemy[asyncio]==2.0.31
+  alembic==1.13.2
+  redis[asyncio]==5.0.7
+  python-jose[cryptography]==3.3.0
+  groq==0.9.0
+  httpx==0.27.0
+  paddleocr==2.7.3
+  opencv-python-headless==4.10.0.84
+  sentence-transformers==3.0.1
+  pgvector==0.3.0
+  slowapi==0.1.9
+  prometheus-fastapi-instrumentator==7.0.0
+  python-multipart==0.0.9
+
+4.3 .env Template
+  📄  .env.example
+  # Database
+  DATABASE_URL=postgresql+asyncpg://ted_user:${DB_PASSWORD}@db:5432/ted
+  DB_PASSWORD=change_me_in_production
+  REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+  REDIS_PASSWORD=change_me_in_production
+  
+  # Auth
+  JWT_SECRET=generate_with_openssl_rand_hex_32
+  JWT_ALGORITHM=HS256
+  
+  # LLM
+  GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
+  GROQ_MODEL=llama-3.3-70b-versatile
+  AZURE_OPENAI_KEY=
+  
+  # Freshworks
+  FRESHWORKS_DOMAIN=yourcompany.freshservice.com
+  FRESHWORKS_API_KEY=base64_encoded_api_key
+  
+  # App
+  CONFIDENCE_THRESHOLD=0.80
+  RAG_TOP_K=3
+  SESSION_TIMEOUT_MINUTES=5

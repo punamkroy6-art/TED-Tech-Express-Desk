@@ -1,0 +1,621 @@
+﻿
+
+
+TED
+Tech Express Desk
+AI-Powered IT Support Kiosk
+Technical Requirements Document (TRD) — v1.0
+Scope: ITSM Workflow  •  AI Diagnostic Engine  •  Freshworks Integration
+
+Document Version
+v1.0
+Status
+Draft — For Engineering Review
+Owner
+IT Operations – AI/ML Engineering
+Related PRD
+TED PRD v1.0
+Stack
+FastAPI · React · PostgreSQL · Redis
+ITSM
+Freshworks REST API
+Auth
+SSO (OAuth 2.0 / SAML) + Badge RFID
+
+
+CONFIDENTIAL — INTERNAL USE ONLY
+
+1. Introduction
+1.1 Purpose
+This Technical Requirements Document (TRD) defines the engineering specifications, system design, API contracts, data schemas, and integration requirements for TED (Tech Express Desk) — an AI-powered IT support kiosk. This document covers the software, AI, and ITSM layers only (Phase 1). Hardware/CV components are addressed in a separate TRD.
+
+1.2 Scope
+Authentication service (SSO + Badge RFID)
+AI Diagnostic Engine (error matching, OCR, fix generation)
+RAG pipeline for KB and past ticket lookup
+Freshworks ITSM integration (ticket creation, KB, routing)
+Kiosk UI (React touchscreen application)
+FastAPI backend (all service endpoints)
+Data storage (PostgreSQL + Redis)
+Security, monitoring, and audit logging
+
+1.3 Assumptions
+Freshworks is the organisation's ITSM platform with API access enabled
+SSO is available via existing corporate identity provider (Azure AD / Okta)
+Kiosk hardware has network connectivity (Ethernet or Wi-Fi)
+All services deployed on-device (edge) with cloud API calls for AI and Freshworks
+
+2. System Architecture
+2.1 High-Level Component Diagram
+TED is composed of five primary software layers communicating via internal REST APIs and external third-party integrations:
+
+Layer
+Component
+Technology
+Responsibility
+Presentation
+Kiosk UI
+React 18 (Touchscreen)
+Employee-facing interface, screen flow, API calls
+API Gateway
+Backend API
+FastAPI (Python 3.11)
+Routes all requests, auth validation, orchestration
+AI Engine
+Diagnostic Engine
+LLM + Rule Engine + RAG
+Error analysis, fix generation, confidence scoring
+Data
+Persistence Layer
+PostgreSQL + Redis
+Sessions, logs, error DB, scan history, caching
+Integration
+ITSM Connector
+Freshworks REST API
+Ticket creation, KB search, asset lookup, routing
+
+2.2 Request Flow
+Employee authenticates at kiosk (badge/SSO) → Auth Service validates → JWT issued
+Employee connects device or selects issue → UI sends request to FastAPI
+FastAPI triggers Diagnostic Engine → error DB match + OCR pipeline
+If match found: fix steps returned to UI → Employee attempts resolution
+If no match: RAG pipeline queries vector DB (KB + past tickets)
+If unresolved: Freshworks ticket auto-created via ITSM Connector
+Outcome logged to PostgreSQL → session closed → audit entry written
+
+2.3 Deployment Topology
+All services run as Docker containers via Docker Compose on kiosk device
+Freshworks API calls made over HTTPS to cloud
+LLM inference: cloud API (OpenAI / Groq / Azure OpenAI) — not on-device
+Vector DB: cloud-hosted (Pinecone) or local (pgvector extension on PostgreSQL)
+Redis runs locally on kiosk device for session caching
+
+3. Authentication & Identity
+3.1 SSO Integration
+TED uses the organisation's existing identity provider (IdP) for employee authentication via OAuth 2.0 / SAML 2.0.
+
+Parameter
+Specification
+Protocol
+OAuth 2.0 with PKCE (preferred) or SAML 2.0
+Identity Provider
+Azure AD / Okta (configurable)
+Token Type
+JWT (RS256 signed)
+Token Expiry
+15 minutes (access token); 8 hours (refresh token)
+Scopes Required
+openid, profile, email
+Session Timeout
+Auto-logout after 5 minutes inactivity at kiosk
+Claims Required
+sub (user ID), email, displayName, department
+
+3.2 Badge / RFID Authentication
+RFID reader communicates via USB HID protocol to FastAPI auth service
+Badge UID looked up against Active Directory / employee directory API
+Lookup returns: employee ID, name, department, manager — used to pre-fill ticket
+Fallback: manual SSO login on screen if badge fails
+Failed auth attempts: 3 retries then 60-second lockout
+
+3.3 Session Management
+  POST /api/auth/session → { token, employeeId, name, dept, expiry }
+  DELETE /api/auth/session → session invalidated, audit log written
+All API requests require Bearer token in Authorization header
+Session data stored in Redis with TTL matching token expiry
+On session end: all temporary session data purged from Redis
+
+4. AI Diagnostic Engine
+4.1 Overview
+The AI Diagnostic Engine is the core intelligence of TED. It receives structured input (device info, error text, screenshots) and returns a diagnosis, confidence score, and step-by-step fix recommendation. It operates as a hybrid: rule-based error matching first (fast, deterministic), then LLM-based analysis for unmatched cases.
+
+4.2 Input Schema
+  POST /api/diagnose
+  {
+    "session_id": "string",
+    "device_info": { "os": "string", "model": "string", "serial": "string" },
+    "error_text": "string",          // from OCR or manual input
+    "screenshot_b64": "string|null", // base64 encoded PNG
+    "recording_url": "string|null",  // path to screen recording file
+    "issue_description": "string"    // employee free-text description
+  }
+
+4.3 Output Schema
+  {
+    "diagnosis": "string",
+    "confidence": 0.0-1.0,
+    "severity": "low|medium|high|critical",
+    "fix_steps": ["string"],
+    "kb_references": [{ "id": "string", "title": "string", "url": "string" }],
+    "past_ticket_refs": [{ "id": "string", "summary": "string", "resolution": "string" }],
+    "suggested_group": "string",
+    "action": "self_resolve|guided_fix|create_ticket"
+  }
+
+4.4 Decision Logic
+Confidence
+Source
+Action
+UI Shown
+>80%
+Error DB match
+Auto-fix triggered
+Step-by-step fix screen
+50–80%
+Partial DB + LLM
+Guided fix shown
+Fix steps + caution warning
+30–50%
+LLM + RAG only
+Suggest fix, offer ticket
+Steps + 'Create Ticket' button
+<30%
+No match
+Auto-create ticket
+Escalation screen + SD ETA
+
+4.5 Error Database Schema
+The error database is a structured PostgreSQL table with 100+ pre-loaded entries, continuously updated:
+  CREATE TABLE error_patterns (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    error_code   VARCHAR(100),
+    keywords     TEXT[],
+    os_platform  VARCHAR(50),
+    category     VARCHAR(100),
+    description  TEXT,
+    fix_steps    JSONB,
+    confidence   FLOAT,
+    source       VARCHAR(50),  -- 'manual' | 'ml_generated' | 'imported'
+    created_at   TIMESTAMP DEFAULT now(),
+    updated_at   TIMESTAMP DEFAULT now()
+  );
+
+4.6 LLM Integration
+Parameter
+Specification
+Primary Model
+Groq LLaMA 3.3 70B (fast inference, low cost)
+Fallback Model
+Azure OpenAI GPT-4o (if Groq unavailable)
+Max Tokens
+1000 (fix generation); 500 (diagnosis summary)
+Temperature
+0.2 (deterministic fix steps)
+System Prompt
+IT support context: concise, numbered fix steps only
+Timeout
+10 seconds — fallback to rule-based if exceeded
+Cost Control
+Cache identical error queries in Redis (TTL: 24hrs)
+
+5. OCR Pipeline (PaddleOCR)
+5.1 Purpose
+The OCR pipeline extracts error text from screenshots and screen recordings provided at the kiosk. Extracted text is passed directly to the AI Diagnostic Engine as structured input.
+
+5.2 Pipeline Steps
+Input received: screenshot (PNG/JPEG) or screen recording (MP4)
+If recording: extract frames at 1 fps using OpenCV, select frame with highest text density
+Image preprocessing: resize to 1280px width, convert to grayscale, apply CLAHE contrast enhancement
+PaddleOCR (PP-OCRv4) runs inference → returns text blocks with bounding boxes + confidence
+Post-processing: filter blocks with confidence <0.7, join text into structured string
+Error code extraction: regex pass for known patterns (e.g. 0x000000XX, error XXXX, exit code N)
+Structured output passed to Diagnostic Engine as error_text field
+
+5.3 OCR Output Schema
+  {
+    "raw_text": "string",
+    "error_codes": ["string"],
+    "confidence_avg": 0.0-1.0,
+    "blocks": [{ "text": "string", "bbox": [x,y,w,h], "confidence": 0.0-1.0 }]
+  }
+
+5.4 Storage & Retention
+Screenshots stored encrypted (AES-256) in /tmp/sessions/{session_id}/
+Purged on session close unless attached to a Freshworks ticket
+If ticket created: uploaded to Freshworks attachment, then purged locally
+Screen recordings: processed in-memory only — never stored to disk
+
+6. RAG Pipeline — KB & Past Ticket Lookup
+6.1 Overview
+The RAG (Retrieval Augmented Generation) pipeline enables TED to search past resolved Freshworks tickets and KB articles semantically, surface relevant resolutions, and pass them as context to the LLM for fix generation.
+
+6.2 Embedding & Vector Store
+Parameter
+Specification
+Embedding Model
+sentence-transformers/all-MiniLM-L6-v2 (384 dimensions)
+Vector Store
+pgvector extension on PostgreSQL (local, no extra cost)
+Similarity Metric
+Cosine similarity
+Match Threshold
+>0.80 = surface result; 0.60–0.80 = include as context only
+Top-K Results
+Return top 3 matches per query
+Index Refresh
+Nightly sync from Freshworks (new tickets + KB updates)
+
+6.3 Data Ingestion Pipeline
+Nightly cron job calls Freshworks API: fetch resolved tickets (last 90 days) + all KB articles
+Each ticket/KB chunked into: title + description + resolution (max 512 tokens)
+Embedding generated per chunk via sentence-transformers
+Upserted into pgvector table with metadata (ticket ID, category, resolved date)
+Stale entries (>180 days, no views) soft-deleted from index
+
+6.4 Vector DB Schema
+  CREATE TABLE knowledge_embeddings (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_type VARCHAR(20),   -- 'ticket' | 'kb_article'
+    source_id   VARCHAR(100),  -- Freshworks ticket/article ID
+    title       TEXT,
+    content     TEXT,
+    resolution  TEXT,
+    embedding   vector(384),
+    category    VARCHAR(100),
+    created_at  TIMESTAMP DEFAULT now(),
+    last_used   TIMESTAMP
+  );
+  CREATE INDEX ON knowledge_embeddings USING ivfflat (embedding vector_cosine_ops);
+
+7. Freshworks ITSM Integration
+7.1 API Authentication
+Auth method: API Key in request header (X-Freshservice-Auth)
+API key stored in environment variable — never hardcoded
+Key rotation: every 90 days, managed via secrets manager
+All calls over HTTPS/TLS 1.3 only
+
+7.2 Endpoints Used
+Method
+Endpoint
+Purpose
+POST
+/ tickets
+Create new incident ticket
+GET
+/ tickets/{id}
+Fetch ticket status (webhook fallback)
+POST
+/ tickets/{id}/notes
+Add AI diagnosis note to ticket
+GET
+/ knowledge_base/articles
+Search KB articles by keyword
+GET
+/ assets?filter=serial:{sn}
+Fetch device asset by serial number
+PUT
+/ assets/{id}
+Update asset condition / custodian
+POST
+/ tickets/{id}/attachments
+Attach screenshot / CV scan to ticket
+
+7.3 Ticket Creation Payload
+  POST /api/v2/tickets
+  {
+    "subject":       "[TED] {AI_generated_summary}",
+    "description":   "{diagnostic_results} + {ai_analysis} + {fix_attempted}",
+    "requester_id":  "{freshworks_employee_id}",
+    "priority":      1-4,  // 1=Low 2=Medium 3=High 4=Urgent
+    "status":        2,    // Open
+    "group_id":      "{ai_suggested_group_id}",  // SD validates before assign
+    "custom_fields": {
+      "kiosk_session_id": "{session_id}",
+      "ai_confidence":    "{confidence_score}",
+      "device_serial":    "{serial_number}",
+      "fix_attempted":    true|false
+    }
+  }
+
+7.4 Error Handling & Retry Logic
+HTTP 429 (rate limit): exponential backoff — retry at 2s, 4s, 8s (max 3 retries)
+HTTP 5xx (server error): retry once after 5 seconds, then fallback to local queue
+Offline fallback: ticket payload stored in PostgreSQL queue, synced when connection restored
+All API failures logged to audit table with timestamp and error code
+
+8. FastAPI Backend
+8.1 Full Endpoint Reference
+Method
+Route
+Auth
+Description
+POST
+/auth/session
+None
+Create session via SSO/badge
+DELETE
+/auth/session
+JWT
+End session, purge temp data
+POST
+/diagnose
+JWT
+Run diagnostic engine
+GET
+/diagnose/{id}
+JWT
+Poll async diagnosis result
+POST
+/ocr
+JWT
+Run PaddleOCR on uploaded image
+POST
+/ticket
+JWT
+Create Freshworks ticket
+GET
+/kb/search
+JWT
+Semantic KB + ticket search
+GET
+/device/{serial}
+JWT
+Lookup device asset in Freshworks
+POST
+/loaner/request
+JWT
+Create loaner device SR
+GET
+/health
+None
+Service health check
+GET
+/metrics
+Internal
+Prometheus metrics endpoint
+
+8.2 Middleware Stack
+JWT validation middleware: validates Bearer token on all protected routes
+CORS middleware: restricted to kiosk UI origin only
+Rate limiting: 60 requests/minute per session token (slowapi)
+Request logging: all requests logged with session ID, endpoint, latency, status
+Error handler: standardised error response schema across all routes
+
+8.3 Async Task Handling
+Long-running tasks (LLM inference, OCR on recordings) run as background tasks via FastAPI BackgroundTasks or Celery workers:
+Diagnosis requests return immediately with a job_id
+Client polls GET /diagnose/{id} every 2 seconds until status = complete
+Timeout: 30 seconds max — returns partial result with confidence=0 if exceeded
+
+9. Kiosk UI — Technical Spec
+9.1 Tech Stack
+Framework: React 18 with TypeScript
+State management: Zustand (lightweight, no Redux overhead)
+Styling: Tailwind CSS — large touch targets (min 48×48px)
+Screen resolution: optimised for 1080p portrait (1080×1920)
+Idle screen: screensaver after 2 minutes, full reset after 5 minutes
+
+9.2 Screen State Machine
+State
+Trigger
+Next State
+IDLE
+Badge tap or screen touch
+AUTH
+AUTH
+SSO/badge success
+HOME
+HOME
+Employee selects: issue / loaner
+DIAGNOSE or LOANER
+DIAGNOSE
+Device connected / issue described
+SCANNING
+SCANNING
+Diagnostic engine running
+RESULT
+RESULT (resolved)
+Employee confirms fix worked
+FEEDBACK → IDLE
+RESULT (escalate)
+Confidence < threshold
+TICKET_CREATED → IDLE
+LOANER
+Device scan + dispensed
+SIGN_OFF → IDLE
+ERROR
+Any unhandled exception
+ERROR_SCREEN → IDLE
+
+9.3 Offline / Degraded Mode
+If FastAPI backend unreachable: show manual ticket form (name, issue description, priority)
+Form submission queued locally → synced to Freshworks when connectivity restored
+If Freshworks API unreachable: queue ticket payload in PostgreSQL offline_queue table
+Degraded mode banner shown to employee with estimated SD response time
+
+10. Data Storage
+10.1 PostgreSQL — Core Tables
+sessions
+  CREATE TABLE sessions (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id   VARCHAR(100) NOT NULL,
+    employee_name VARCHAR(200),
+    department    VARCHAR(100),
+    started_at    TIMESTAMP DEFAULT now(),
+    ended_at      TIMESTAMP,
+    outcome       VARCHAR(50),  -- 'resolved'|'ticket_created'|'abandoned'
+    ticket_id     VARCHAR(100)  -- Freshworks ticket ID if raised
+  );
+
+audit_log
+  CREATE TABLE audit_log (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  UUID REFERENCES sessions(id),
+    action      VARCHAR(100),
+    detail      JSONB,
+    created_at  TIMESTAMP DEFAULT now()
+  );
+
+offline_queue
+  CREATE TABLE offline_queue (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payload     JSONB NOT NULL,
+    type        VARCHAR(50),  -- 'ticket' | 'asset_update'
+    status      VARCHAR(20) DEFAULT 'pending',
+    retries     INT DEFAULT 0,
+    created_at  TIMESTAMP DEFAULT now()
+  );
+
+10.2 Redis — Caching Strategy
+Key Pattern
+Purpose
+TTL
+session:{id}
+Active session data + JWT
+15 minutes
+diag_cache:{error_hash}
+Cached LLM diagnosis for identical errors
+24 hours
+fw_kb:{query_hash}
+Cached Freshworks KB search results
+6 hours
+device:{serial}
+Cached device asset data from Freshworks
+1 hour
+rate_limit:{session_id}
+API rate limit counter
+1 minute
+
+10.3 Data Retention Policy
+Session records: retained 90 days then purged
+Audit logs: retained 12 months (compliance requirement)
+Error pattern DB: indefinite (versioned updates only)
+Knowledge embeddings: 180-day rolling window
+Screenshots: purged on session close unless attached to ticket
+
+11. Security Requirements
+Category
+Requirement
+Transport
+TLS 1.3 enforced for all external API calls (Freshworks, LLM, IdP)
+Encryption at Rest
+AES-256 for PostgreSQL data volume and screenshot temp storage
+Secrets Management
+API keys and credentials stored in environment variables or HashiCorp Vault
+PII Masking
+Employee email and name masked in all application logs
+RBAC
+Three roles: End User (kiosk), SD Agent (ticket view), IT Manager (analytics + config)
+Session Isolation
+Each kiosk session fully isolated; no data leakage between sessions
+Key Rotation
+Freshworks API key rotated every 90 days; LLM API key every 60 days
+Vulnerability Scanning
+Docker images scanned via Trivy on every build
+Consent
+Employee consent screen shown at session start; data usage clearly stated
+
+12. Monitoring & Alerting
+12.1 Prometheus Metrics
+ted_sessions_total — counter: total kiosk sessions started
+ted_sessions_resolved — counter: sessions resolved without ticket
+ted_tickets_created — counter: Freshworks tickets auto-created
+ted_diagnose_latency_seconds — histogram: AI engine response time
+ted_freshworks_api_errors — counter: failed Freshworks API calls
+ted_ocr_confidence_avg — gauge: average OCR confidence per session
+ted_llm_tokens_used — counter: LLM token consumption for cost tracking
+
+12.2 Grafana Dashboards
+Kiosk Health Dashboard: uptime, API latency, error rate, session count
+Ticket Deflection Dashboard: resolved vs escalated, deflection rate trend
+AI Accuracy Dashboard: diagnosis confidence distribution, LLM vs rule-based split
+Cost Dashboard: LLM token spend per day, Freshworks API call volume
+
+12.3 Alert Thresholds
+Metric
+Threshold
+Action
+FastAPI error rate
+>5% over 5 min
+Page on-call IT engineer
+Diagnose latency p95
+>15 seconds
+Alert + auto-fallback to rule-based
+Freshworks API failures
+>3 consecutive
+Switch to offline queue mode
+Disk usage (kiosk)
+>80%
+Alert IT ops — purge old session data
+LLM daily token spend
+>$10/day
+Alert IT manager — review cache hits
+
+13. Testing Requirements
+Test Type
+Coverage
+Tool
+Unit Tests
+Error DB matching logic, OCR post-processing, confidence scoring
+pytest
+Integration Tests
+FastAPI endpoints, Freshworks API mock, Auth flow
+pytest + httpx
+RAG Accuracy Tests
+Top-3 retrieval precision on 50 sample queries
+Custom eval script
+LLM Output Tests
+Fix step quality: completeness, safety, no hallucination
+Promptfoo / manual
+UI E2E Tests
+All screen state transitions, form submissions, error states
+Playwright
+Load Tests
+50 concurrent sessions, API latency under load
+Locust
+Security Tests
+JWT bypass, injection, CORS misconfiguration
+OWASP ZAP
+
+13.1 Acceptance Criteria
+AI diagnosis confidence >80% on test dataset of 100 known errors
+FastAPI p95 latency <10 seconds under normal load
+Freshworks ticket creation success rate >99%
+RAG top-3 retrieval precision >75% on held-out query set
+Zero critical security findings from OWASP ZAP scan
+
+14. Open Technical Items
+#
+Item
+Owner
+1
+Confirm LLM provider: Groq vs Azure OpenAI (cost vs SLA)
+AI/ML Engineering
+2
+Confirm vector DB: pgvector (local) vs Pinecone (cloud) for RAG
+AI/ML Engineering
+3
+Confirm IdP for SSO integration: Azure AD or Okta
+IT Infrastructure
+4
+Freshworks API tier — confirm rate limits and attachment size limits
+IT Operations
+5
+Badge RFID standard in use across office sites
+Facilities
+6
+Data residency requirements for LLM API calls (on-prem needed?)
+Legal / Compliance
+7
+Define offline queue max size and data loss tolerance
+Product Owner

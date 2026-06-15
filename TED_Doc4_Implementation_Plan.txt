@@ -1,0 +1,274 @@
+﻿
+
+
+TED
+Tech Express Desk
+Document 4 of 5  —  Implementation Plan
+
+
+
+CONFIDENTIAL
+
+1. Implementation Overview
+TED is delivered across 5 phases over approximately 9 months. Each phase has clear deliverables, acceptance criteria, and a go/no-go checkpoint before proceeding.
+
+Phase
+Name
+Duration
+Key Deliverable
+1
+Foundation
+Weeks 1–3
+Project setup, DB, auth, basic FastAPI
+2
+AI Core
+Weeks 4–7
+Diagnostic engine, OCR, error DB, RAG
+3
+ITSM Integration
+Weeks 8–10
+Freshworks full integration, auto-ticketing
+4
+Kiosk UI + QA
+Weeks 11–14
+React UI, all flows, security + load testing
+5
+Pilot + Rollout
+Weeks 15–20
+1–2 kiosk deployment, monitoring, full rollout
+
+PHASE 1: Foundation
+Duration: Weeks 1–3  |  Goal: Working project skeleton with auth, DB, and API running
+
+Week 1 — Project Setup & Infrastructure
+Initialise Git repository with branch strategy (main, develop, feature/*)
+Set up Docker Compose: PostgreSQL 16 + pgvector, Redis 7, FastAPI service
+Configure environment variables and secrets management (.env + docker secrets)
+Set up CI/CD pipeline: GitHub Actions — lint, test, build on every PR
+Create PostgreSQL database, run initial migrations (Alembic)
+Deploy all core table schemas: employees, sessions, audit_log, system_config
+
+Week 2 — Authentication Service
+Implement OAuth 2.0 / SAML SSO integration with corporate IdP (Azure AD / Okta)
+Build JWT issuance and validation middleware in FastAPI
+Implement badge RFID reader USB HID listener service
+Build employee directory lookup and local cache (employees table)
+Session creation, refresh, and invalidation endpoints
+Unit tests: auth flow, token expiry, failed auth lockout
+
+Week 3 — Base API + Monitoring
+Scaffold all FastAPI routes (stubs returning 501 where not yet implemented)
+Add request logging middleware, CORS, rate limiting (slowapi)
+Set up Prometheus metrics endpoint + basic Grafana dashboard
+Add health check endpoint with DB and Redis connectivity checks
+Phase 1 checkpoint: auth works end-to-end, DB migrations clean, CI green
+
+Phase 1 Acceptance Criteria
+Status Check
+Employee can authenticate via badge and SSO
+✅ Manual test
+JWT issued and validated on all protected routes
+✅ Unit test
+All DB tables created and migrated cleanly
+✅ Alembic check
+CI pipeline passes on all branches
+✅ GitHub Actions
+
+PHASE 2: AI Core
+Duration: Weeks 4–7  |  Goal: Full diagnostic engine, OCR pipeline, RAG pipeline operational
+
+Week 4 — Error Database & Rule Engine
+Design and seed error_patterns table with 100+ known IT errors
+Build keyword + error code matching logic (PostgreSQL full-text search on keywords array)
+Implement confidence scoring algorithm (match quality → 0.0–1.0)
+Build fix step retrieval and formatting service
+Unit tests: match accuracy on 50 known errors (target >90%)
+
+Week 5 — OCR Pipeline
+Integrate PaddleOCR (PP-OCRv4) into FastAPI service
+Build image preprocessing pipeline: resize, grayscale, CLAHE contrast
+Implement screen recording frame extraction (OpenCV, 1 fps, best-frame selection)
+Build error code regex extraction layer
+Build /ocr endpoint and integrate output into diagnosis flow
+Tests: OCR accuracy on 20 sample screenshots (target >80% text extraction)
+
+Week 6 — LLM Integration
+Integrate Groq API (LLaMA 3.3 70B) with system prompt for IT fix generation
+Build Azure OpenAI fallback with automatic failover logic
+Implement Redis caching for identical error queries (24hr TTL)
+Build /diagnose endpoint: rule engine first → LLM if low confidence
+Implement async job pattern: job_id response + polling endpoint
+Tests: fix quality evaluation on 30 sample errors; latency <10s p95
+
+Week 7 — RAG Pipeline
+Enable pgvector extension, create knowledge_embeddings table and index
+Integrate sentence-transformers (all-MiniLM-L6-v2) embedding generation
+Build Freshworks KB + ticket ingestion script (nightly cron)
+Implement semantic search query endpoint with cosine similarity + threshold filtering
+Integrate RAG results as LLM context in /diagnose endpoint
+Tests: retrieval precision on 50 sample queries (target >75% top-3 accuracy)
+
+Phase 2 Acceptance Criteria
+Status Check
+Error DB matches >90% of test set correctly
+✅ pytest
+LLM fix generation p95 latency <10 seconds
+✅ Load test
+RAG retrieval precision >75% on held-out set
+✅ Eval script
+OCR extracts text from >80% of test screenshots
+✅ pytest
+
+PHASE 3: ITSM Integration
+Duration: Weeks 8–10  |  Goal: Freshworks auto-ticketing, KB search, asset lookup fully operational
+
+Week 8 — Freshworks API Foundation
+Configure Freshworks API credentials (secure env vars)
+Build FresworksClient service: auth headers, retry logic, rate limit handling
+Implement GET /assets (device lookup by serial number)
+Implement GET /knowledge_base/articles (KB search)
+Build offline_queue table + background worker for failed API calls
+Tests: mock Freshworks API responses, test retry + offline queue logic
+
+Week 9 — Ticket Creation & Routing
+Implement POST /tickets with full payload construction from session + diagnosis data
+Build screenshot attachment upload to Freshworks ticket
+Implement AI assignment group suggestion + SD validation flag in ticket
+Build /ticket endpoint in FastAPI wiring all components together
+Implement freshworks_tickets mirror table sync
+Tests: end-to-end ticket creation in Freshworks staging environment
+
+Week 10 — Loaner Flow + Asset Management
+Implement loaner_requests table and full loaner SR creation flow
+Build PUT /assets for CMDB custodian update on loaner dispensing
+Implement loaner return detection and post-loan SR update
+Build return reminder scheduling (Freshworks scheduled note)
+Phase 3 checkpoint: full ticket lifecycle tested in staging
+
+Phase 3 Acceptance Criteria
+Status Check
+Freshworks ticket created with all fields populated
+✅ Staging test
+Offline queue flushes correctly on reconnection
+✅ Integration test
+Loaner SR raised and CMDB updated correctly
+✅ Staging test
+API retry logic handles 429 and 5xx correctly
+✅ pytest mock
+
+PHASE 4: Kiosk UI + QA
+Duration: Weeks 11–14  |  Goal: Fully functional React kiosk UI, all flows tested, security cleared
+
+Week 11 — React UI Foundation
+Scaffold React 18 + TypeScript + Tailwind CSS project
+Implement Zustand state management with session state machine
+Build shared components: Button, Card, ProgressBar, StepCheckbox, Toast
+Build IDLE and AUTH screens with badge tap simulation
+Implement API client layer (axios with JWT interceptor)
+
+Week 12 — Diagnostic Flow Screens
+Build HOME screen (two action cards)
+Build DIAGNOSE screen (device connect / describe issue)
+Build SCANNING screen (animated progress + status updates)
+Build RESULT screen (fix steps, checkboxes, KB references)
+Build ESCALATE / TICKET_CREATED screen
+Wire all screens to FastAPI endpoints end-to-end
+
+Week 13 — Loaner + Edge Case Screens
+Build LOANER device selection and sign-off screens
+Build OFFLINE degraded mode with manual form
+Build ERROR fallback screen
+Implement session timeout warning + auto-close
+Implement CSAT rating screen
+Accessibility audit: WCAG 2.1 AA check on all screens
+
+Week 14 — QA, Security & Performance
+E2E tests with Playwright: all 5 flows, all edge cases
+Load test with Locust: 50 concurrent sessions, verify p95 <10s
+Security scan: OWASP ZAP against all FastAPI endpoints
+PII masking verification in all logs
+Fix all critical and high findings before Phase 5 go-ahead
+
+Phase 4 Acceptance Criteria
+Status Check
+All 5 flows complete E2E without errors
+✅ Playwright
+p95 API latency <10s under 50 concurrent sessions
+✅ Locust
+Zero critical security findings from OWASP ZAP
+✅ ZAP report
+WCAG 2.1 AA compliant on all screens
+✅ Accessibility audit
+
+PHASE 5: Pilot + Full Rollout
+Duration: Weeks 15–20  |  Goal: Live deployment, KPI measurement, full office rollout
+
+Weeks 15–16 — Pilot Deployment
+Deploy 1–2 kiosk units at selected high-traffic office location
+Configure kiosk-specific settings (kiosk_id, site name, Freshworks group mapping)
+Train SD team on TED-generated tickets and AI routing workflow
+Monitor all KPIs daily: deflection rate, session duration, CSAT, AI accuracy
+Collect employee feedback via post-session CSAT + optional survey
+
+Weeks 17–18 — Iteration
+Review pilot KPI data — identify underperforming areas
+Retrain/expand error_patterns DB based on real session data
+Re-embed any new KB articles or resolved tickets from pilot period
+UI improvements based on employee feedback
+Fine-tune LLM system prompt based on fix quality review
+
+Weeks 19–20 — Full Rollout
+Deploy remaining kiosk units across all planned office locations
+Set up centralised monitoring dashboard (Grafana) for all kiosks
+Establish SLA: kiosk uptime >99.5%, escalation to IT ops if offline >30 min
+Publish internal comms to employees: TED launch announcement
+Schedule quarterly KPI review cadence with IT Manager
+
+2. Team & Roles
+Role
+Phases
+Responsibilities
+AI/ML Engineer
+2, 5
+Diagnostic engine, LLM integration, RAG pipeline, error DB
+Backend Engineer
+1, 2, 3
+FastAPI, DB schema, Freshworks integration, auth
+Frontend Engineer
+4
+React UI, all screens, state machine, API wiring
+QA Engineer
+4, 5
+E2E tests, load tests, security scan, UAT
+IT Operations
+3, 5
+Freshworks config, kiosk deployment, SD training
+IT Manager
+All
+Steering, KPI sign-off, stakeholder comms
+
+3. Risks & Mitigations
+Risk
+Likelihood
+Impact
+Mitigation
+LLM API latency exceeds 10s
+Medium
+High
+Cache identical queries; fallback to rule-based
+Freshworks API rate limits hit
+Low
+Medium
+Exponential backoff; offline queue fallback
+Low employee adoption
+Medium
+High
+Office comms, walk-up signage, SD endorsement
+AI fix steps incorrect/harmful
+Low
+High
+Confidence threshold; SD always in loop for <80%
+IdP SSO integration delays
+Medium
+Medium
+Badge-only auth as fallback from Day 1
