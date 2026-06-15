@@ -37,7 +37,14 @@ export default function DiagnosticScreen() {
       setStepIndex(i => Math.min(i + 1, SCAN_STEPS.length - 1))
     }, 700)
 
-    // Run real diagnostic — pass token explicitly in case axios default isn't set
+    // Guard: if no token, go straight to manual describe
+    if (!token) {
+      clearInterval(interval)
+      setScreen('DIAGNOSE')
+      return
+    }
+
+    // Run real diagnostic
     api.post('/diagnostic/run', {}, { headers: { Authorization: `Bearer ${token}` } }).then(res => {
       clearInterval(interval)
       setResult(res.data)
