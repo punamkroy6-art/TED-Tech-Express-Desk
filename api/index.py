@@ -22,6 +22,19 @@ os.environ.setdefault(
     os.environ.get('JWT_SECRET', 'vercel-demo-secret-change-in-production')
 )
 
+# Stub out hardware-only modules that aren't installed on Vercel
+import types, sys as _sys
+
+def _stub(name):
+    mod = types.ModuleType(name)
+    _sys.modules[name] = mod
+    return mod
+
+for _pkg in ('cv2', 'paramiko', 'docx', 'pyzbar', 'pyzbar.pyzbar',
+             'PIL', 'PIL.Image', 'prometheus_fastapi_instrumentator'):
+    if _pkg not in _sys.modules:
+        _stub(_pkg)
+
 # Import the FastAPI app
 from app.main import app  # noqa: E402
 

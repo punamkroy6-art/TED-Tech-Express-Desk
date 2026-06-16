@@ -8,7 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from prometheus_fastapi_instrumentator import Instrumentator
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    _prometheus_available = True
+except ImportError:
+    _prometheus_available = False
 
 from app.routers import auth, diagnose, ocr, ticket, loaner, health, autofix, diagnostic
 from app.middleware.logging import RequestLoggingMiddleware
@@ -53,8 +57,9 @@ app.include_router(health,   prefix='/api',         tags=['Health'])
 app.include_router(autofix,     prefix='/api',         tags=['AutoFix'])
 app.include_router(diagnostic,  prefix='/api',         tags=['Diagnostic'])
 
-# Auto-generate Prometheus metrics configuration
-Instrumentator().instrument(app).expose(app)
+# Prometheus metrics — only when package is installed (skipped on Vercel)
+if _prometheus_available:
+    Instrumentator().instrument(app).expose(app)
 
 # Startup hook to initialize the PostgreSQL database schema
 @app.on_event('startup')
