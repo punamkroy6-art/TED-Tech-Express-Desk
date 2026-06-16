@@ -1,7 +1,0 @@
-{
-  "buildCommand": "cd ted/frontend && npm install && npm run build",
-  "outputDirectory": "ted/frontend/dist",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
