@@ -1,15 +1,14 @@
 {
   "version": 2,
   "name": "ted-tech-express-desk",
+  "framework": null,
 
   "buildCommand": "cd ted/frontend && npm install && npm run build",
   "outputDirectory": "ted/frontend/dist",
   "installCommand": "pip install -r requirements.txt",
-  "framework": null,
 
   "functions": {
     "api/index.py": {
-      "runtime": "python3.11",
       "maxDuration": 60
     }
   },
