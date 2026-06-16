@@ -1,3 +1,11 @@
+# Backend — served by Render, not Vercel
+api/
+ted/backend/
+requirements.txt
+nixpacks.toml
+railway.json
+render.yaml
+
 # Python virtualenv (large, not needed on Vercel)
 ted/python/
 .venv/

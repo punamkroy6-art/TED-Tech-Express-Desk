@@ -1,9 +1,6 @@
 {
-  "version": 2,
-  "name": "ted-tech-express-desk",
   "buildCommand": "cd ted/frontend && npm install && npm run build",
   "outputDirectory": "ted/frontend/dist",
-  "framework": null,
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
