@@ -33,17 +33,20 @@ body {
   overflow: hidden;
 }
 
-/* Force body dark — overrides any Vite scaffold styles */
+/* Force body dark — !important overrides any cached Vite scaffold styles */
 html, body, #root {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  background: #070b14;
-  background: var(--bg, #070b14);
-  color: #f1f5f9;
-  color: var(--text, #f1f5f9);
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  background: #070b14 !important;
+  background: var(--bg, #070b14) !important;
+  color: #f1f5f9 !important;
+  color: var(--text, #f1f5f9) !important;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif !important;
+  border: none !important;
+  text-align: left !important;
 }
 
 /* Shared screen wrapper */

@@ -1,42 +1,27 @@
 {
   "version": 2,
   "name": "ted-tech-express-desk",
+
+  "buildCommand": "cd ted/frontend && npm install && npm run build",
+  "outputDirectory": "ted/frontend/dist",
+  "installCommand": "pip install -r requirements.txt",
   "framework": null,
 
-  "builds": [
-    {
-      "src": "ted/frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist",
-        "buildCommand": "npm install && npm run build"
-      }
-    },
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb",
-        "runtime": "python3.11"
-      }
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.11",
+      "maxDuration": 60
     }
-  ],
+  },
 
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "api/index.py"
+      "source": "/api/:path*",
+      "destination": "/api/index"
     },
     {
-      "src": "/metrics",
-      "dest": "api/index.py"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/:path*",
+      "destination": "/index.html"
     }
   ],
 
@@ -44,10 +29,5 @@
     "USE_LOCAL_MOCK": "true",
     "JWT_ALGORITHM": "HS256",
     "JWT_EXPIRY_MINUTES": "60"
-  },
-
-  "github": {
-    "enabled": true,
-    "autoAlias": true
   }
 }
