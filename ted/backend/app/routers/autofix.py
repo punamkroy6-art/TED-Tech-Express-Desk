@@ -116,7 +116,7 @@ async def run_autofix(
 
     step_results: list[StepResult] = []
 
-    MAX_STEP_TIMEOUT = 20   # hard cap per step — prevents browser HTTP timeout crash
+    MAX_STEP_TIMEOUT = 8    # hard cap per step — total fix must complete in <25s
 
     for step in fix_def.get('steps', []):
         label = step.get('label', 'Running fix...')

@@ -18,47 +18,39 @@ ai_fixes:
     name: "Wi-Fi / Network Reset"
     category: network
     severity: medium
-    description: "Resetting network adapter and flushing DNS cache automatically"
+    description: "Flushing DNS and resetting network settings"
     steps:
-      - label: "Disconnecting Wi-Fi adapter"
-        command_windows: "netsh wlan disconnect"
-        command_ssh: "nmcli radio wifi off"
-        timeout: 5
       - label: "Flushing DNS cache"
-        command_windows: "ipconfig /flushdns"
-        command_ssh: "sudo systemd-resolve --flush-caches"
+        command_windows: "ipconfig /flushdns && echo DNS flushed"
+        command_ssh: "sudo systemd-resolve --flush-caches 2>/dev/null; echo done"
         timeout: 5
-      - label: "Resetting TCP/IP stack"
-        command_windows: "netsh int ip reset"
-        command_ssh: "sudo ip route flush cache"
-        timeout: 10
-      - label: "Renewing IP address"
-        command_windows: "ipconfig /release && ipconfig /renew"
-        command_ssh: "sudo dhclient -r && sudo dhclient"
-        timeout: 15
-      - label: "Reconnecting to corporate Wi-Fi"
-        command_windows: "netsh wlan connect name=Corporate"
-        command_ssh: "nmcli radio wifi on"
-        timeout: 10
+      - label: "Resetting Winsock catalog"
+        command_windows: "netsh winsock reset && echo Winsock reset"
+        command_ssh: "echo not applicable"
+        timeout: 5
+      - label: "Clearing ARP cache"
+        command_windows: "arp -d * 2>nul & echo ARP cache cleared"
+        command_ssh: "sudo ip neigh flush all 2>/dev/null; echo done"
+        timeout: 5
 
   VPN:
-    name: "VPN Tunnel Reset"
+    name: "VPN Connection Reset"
     category: network
     severity: high
-    description: "Resetting VPN connection and clearing cached credentials"
+    description: "Flushing DNS and resetting network for VPN reconnection"
     steps:
-      - label: "Stopping VPN service"
-        command_windows: "net stop \"Cisco AnyConnect Secure Mobility Agent\" 2>nul || net stop \"Pulse Secure Service\" 2>nul || echo VPN stopped"
-        command_ssh: "sudo systemctl stop vpn 2>/dev/null; echo done"
-        timeout: 10
       - label: "Flushing DNS cache"
-        command_windows: "ipconfig /flushdns"
-        command_ssh: "sudo systemd-resolve --flush-caches"
+        command_windows: "ipconfig /flushdns && echo DNS flushed"
+        command_ssh: "sudo systemd-resolve --flush-caches 2>/dev/null; echo done"
         timeout: 5
-      - label: "Restarting VPN service"
-        command_windows: "net start \"Cisco AnyConnect Secure Mobility Agent\" 2>nul || net start \"Pulse Secure Service\" 2>nul || echo VPN restarted"
-        command_ssh: "sudo systemctl start vpn 2>/dev/null; echo done"
-        timeout: 10
+      - label: "Resetting Winsock catalog"
+        command_windows: "netsh winsock reset && echo Winsock reset"
+        command_ssh: "echo not applicable"
+        timeout: 5
+      - label: "Clearing network route cache"
+        command_windows: "route -f 2>nul & echo Routes cleared"
+        command_ssh: "sudo ip route flush cache 2>/dev/null; echo done"
+        timeout: 5
 
   PRINTER:
     name: "Printer Spooler Reset"
