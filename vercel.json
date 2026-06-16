@@ -1,31 +1,10 @@
 {
   "version": 2,
   "name": "ted-tech-express-desk",
-  "framework": null,
-
   "buildCommand": "cd ted/frontend && npm install && npm run build",
   "outputDirectory": "ted/frontend/dist",
-
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 60
-    }
-  },
-
+  "framework": null,
   "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/:path*",
-      "destination": "/index.html"
-    }
-  ],
-
-  "env": {
-    "USE_LOCAL_MOCK": "true",
-    "JWT_ALGORITHM": "HS256",
-    "JWT_EXPIRY_MINUTES": "60"
-  }
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
