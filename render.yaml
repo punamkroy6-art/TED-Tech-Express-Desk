@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: ted-backend
+    runtime: python
+    region: oregon
+    plan: free
+
+    buildCommand: |
+      pip install -r requirements.txt
+      cd ted/backend && python seed_data.py
+
+    startCommand: cd ted/backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: USE_LOCAL_MOCK
+        value: "true"
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRY_MINUTES
+        value: "60"
+      - key: JWT_SECRET
+        generateValue: true   # Render auto-generates a secure random value
+      - key: PYTHON_VERSION
+        value: "3.11.0"
