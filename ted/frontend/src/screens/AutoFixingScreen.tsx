@@ -41,7 +41,10 @@ export default function AutoFixingScreen() {
         ssh_host: '',
         ssh_user: '',
         ssh_password: '',
-      }, { headers: { Authorization: `Bearer ${token}` } })
+      }, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 30000,   // hard 30s cap — prevents browser crash on long commands
+      })
 
       const data = res.data
       setFixName(data.fix_name)

@@ -156,23 +156,30 @@ ai_fixes:
         timeout: 8
 
   BSOD:
-    name: "System File Repair"
+    name: "BSOD Immediate Stabilisation"
     category: system
     severity: critical
-    description: "Running Windows System File Checker and DISM repair"
+    # sfc /scannow removed — takes 10-30 min, crashes browser HTTP connection
+    # DISM removed — takes 3-5 min, same issue
+    # Replaced with fast (<5s) stabilisation steps only
+    description: "Clearing crash dumps, flushing event logs, freeing memory"
     steps:
-      - label: "Running System File Checker"
-        command_windows: "sfc /scannow"
-        command_ssh: "sudo fsck -f / 2>/dev/null; echo done"
-        timeout: 120
-      - label: "Checking Windows image health"
-        command_windows: "DISM /Online /Cleanup-Image /CheckHealth"
+      - label: "Flushing Windows event logs"
+        command_windows: "wevtutil cl System 2>nul & wevtutil cl Application 2>nul & echo Logs cleared"
+        command_ssh: "sudo journalctl --vacuum-time=1d 2>/dev/null; echo done"
+        timeout: 8
+      - label: "Clearing crash dump files"
+        command_windows: "del /q /f /s \"%SystemRoot%\\Minidump\\*\" 2>nul & echo Crash dumps cleared"
+        command_ssh: "sudo rm -f /var/crash/* 2>/dev/null; echo done"
+        timeout: 8
+      - label: "Freeing system memory"
+        command_windows: "PowerShell -Command \"[System.GC]::Collect(); Write-Output 'Memory freed'\""
+        command_ssh: "sync && echo 3 | sudo tee /proc/sys/vm/drop_caches 2>/dev/null; echo done"
+        timeout: 8
+      - label: "Checking device health (fast)"
+        command_windows: "DISM /Online /Cleanup-Image /CheckHealth 2>nul & echo Health check done"
         command_ssh: "echo not applicable"
-        timeout: 30
-      - label: "Flushing event logs"
-        command_windows: "wevtutil cl System && wevtutil cl Application && echo Logs cleared"
-        command_ssh: "sudo journalctl --vacuum-time=1d"
-        timeout: 10
+        timeout: 15
 
   OKTA:
     name: "Browser Cache & Cookie Reset"

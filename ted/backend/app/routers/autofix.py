@@ -116,9 +116,11 @@ async def run_autofix(
 
     step_results: list[StepResult] = []
 
+    MAX_STEP_TIMEOUT = 20   # hard cap per step — prevents browser HTTP timeout crash
+
     for step in fix_def.get('steps', []):
         label = step.get('label', 'Running fix...')
-        timeout = step.get('timeout', 30)
+        timeout = min(step.get('timeout', 15), MAX_STEP_TIMEOUT)
         t0 = time.time()
 
         if use_ssh:
