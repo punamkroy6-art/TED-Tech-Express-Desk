@@ -12,6 +12,30 @@ from typing import Optional
 logger = logging.getLogger("ted.autofix.executor")
 
 
+def _is_browser_kill_command(cmd: str) -> bool:
+    """Detect commands that would terminate browser processes on the kiosk."""
+    normalized = cmd.lower()
+    dangerous_markers = [
+        "taskkill /f /im chrome.exe",
+        "taskkill /f /im msedge.exe",
+        "taskkill /f /im microsoftedgecp.exe",
+        "pkill -f chrome",
+        "pkill -f msedge",
+        "pkill -f chromium",
+        "killall chrome",
+        "killall chromium",
+        "killall msedge",
+    ]
+    return any(marker in normalized for marker in dangerous_markers)
+
+
+def _sanitize_command(cmd: str) -> tuple[str, bool, str]:
+    if _is_browser_kill_command(cmd):
+        logger.warning("Unsafe autofix command blocked: %s", cmd)
+        return (cmd, False, "Skipped unsafe browser termination command")
+    return (cmd, True, "")
+
+
 @dataclass
 class FixResult:
     rule_id: str
@@ -38,7 +62,13 @@ def run_local(rule: dict) -> FixResult:
 
     results = []
     errors = []
+    skipped = []
     for cmd in commands:
+        cmd, allowed, reason = _sanitize_command(cmd)
+        if not allowed:
+            skipped.append(f"[{cmd}] {reason}")
+            continue
+
         try:
             result = subprocess.run(
                 cmd, shell=True, capture_output=True, text=True, timeout=30
@@ -52,6 +82,9 @@ def run_local(rule: dict) -> FixResult:
             errors.append(f"[{cmd}] timed out after 30s")
         except Exception as e:
             errors.append(f"[{cmd}] error: {e}")
+
+    if skipped:
+        errors.extend(skipped)
 
     return FixResult(
         rule_id=rule["id"],
@@ -96,6 +129,12 @@ def run_ssh(rule: dict, host: str, username: str, password: str = None,
 
         client.connect(**connect_kwargs)
         for cmd in commands:
+            cmd, allowed, reason = _sanitize_command(cmd)
+            if not allowed:
+                results.append(f"[{cmd}] skipped: {reason}")
+                errors.append(reason)
+                continue
+
             stdin, stdout, stderr = client.exec_command(cmd, timeout=30)
             out = stdout.read().decode().strip()
             err = stderr.read().decode().strip()

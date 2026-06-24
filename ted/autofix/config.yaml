@@ -132,7 +132,7 @@ ai_fixes:
     name: "Memory Optimisation"
     category: performance
     severity: medium
-    description: "Identifying and terminating high-memory background processes"
+    description: "Identifying and reducing memory pressure without closing the kiosk browser"
     steps:
       - label: "Checking top memory consumers"
         command_windows: "PowerShell -Command \"Get-Process | Sort-Object WorkingSet -Descending | Select-Object -First 5 Name,@{N='MB';E={[math]::Round($_.WorkingSet/1MB,1)}} | Format-Table -AutoSize\""
@@ -142,9 +142,9 @@ ai_fixes:
         command_windows: "PowerShell -Command \"[System.GC]::Collect(); Write-Output 'Memory cleared'\""
         command_ssh: "sync && echo 3 | sudo tee /proc/sys/vm/drop_caches"
         timeout: 5
-      - label: "Terminating browser background tasks"
-        command_windows: "taskkill /F /IM chrome.exe 2>nul & taskkill /F /IM msedge.exe 2>nul & echo Background tasks cleared"
-        command_ssh: "pkill -f chrome 2>/dev/null; echo done"
+      - label: "Reclaiming memory without closing browsers"
+        command_windows: "PowerShell -Command \"[System.GC]::Collect(); Write-Output 'Memory reclaimed safely'\""
+        command_ssh: "sync && echo 3 | sudo tee /proc/sys/vm/drop_caches 2>/dev/null; echo done"
         timeout: 8
 
   BSOD:

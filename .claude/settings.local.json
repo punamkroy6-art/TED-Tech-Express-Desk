@@ -13,7 +13,12 @@
       "Bash(curl -s -X POST http://localhost:8000/api/auth/session -H 'Content-Type: application/json' --data-raw '{\"employee_id\":\"EMP-1029\",\"display_name\":\"Alice Vance\",\"kiosk_id\":\"KIOSK-001\",\"auth_method\":\"sso\"}')",
       "Bash(python3 -m json.tool)",
       "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000\" -UseBasicParsing -TimeoutSec 5)",
-      "mcp__Claude_in_Chrome__tabs_context_mcp"
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --title 'feat: add FieldMind AI landing page with live demo links' --body ' *)",
+      "WebFetch(domain:ai-field-services-platform.vercel.app)"
     ]
   }
 }

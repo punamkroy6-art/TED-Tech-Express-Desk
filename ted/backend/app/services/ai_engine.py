@@ -118,7 +118,7 @@ async def _rule_match(error_text: str, device_info: dict) -> dict:
     elif any(k in et for k in ["outlook","email","calendar","syncing"]): fix_key = "OUTLOOK"
     elif any(k in et for k in ["teams","meeting","video call","audio","camera","microphone"]): fix_key = "TEAMS"
     elif any(k in et for k in ["disk","storage","space full","no space"]): fix_key = "DISK"
-    elif any(k in et for k in ["slow","freeze","freezing","memory","ram"]): fix_key = "HIGH_MEMORY"
+    elif any(k in et for k in ["slow","freeze","freezing","memory","ram","high memory","usage"]): fix_key = "HIGH_MEMORY"
     # Also check best pattern keywords if error text didn't match
     if not fix_key and best_pattern:
         kw = " ".join(best_pattern.keywords or []).lower()

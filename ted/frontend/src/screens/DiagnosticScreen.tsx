@@ -70,12 +70,18 @@ export default function DiagnosticScreen() {
           disk_free_gb: result?.hardware?.disk?.primary?.free_gb,
         },
         employee: { name: employee?.name || '', id: employee?.id || '' }
-      }, { headers: { Authorization: `Bearer ${token}` } })
-      setDiagnosis(res.data)
-      if (res.data.action === 'create_ticket') setScreen('ESCALATE')
-      else if (res.data.action === 'self_resolve' && res.data.auto_executable) setScreen('AUTOFIXING')
-      else setScreen('RESULT')
-    } catch {
+      }, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 })
+
+      // Ensure fix_key is present before going to autofix
+      if (res.data.fix_key && res.data.action === 'self_resolve') {
+        setDiagnosis(res.data)
+        setScreen('AUTOFIXING')
+      } else {
+        setDiagnosis(res.data)
+        setScreen('RESULT')
+      }
+    } catch (err) {
+      console.error('Diagnose failed:', err)
       setScreen('DIAGNOSE')
     }
   }
