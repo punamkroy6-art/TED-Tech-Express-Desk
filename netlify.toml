@@ -4,7 +4,7 @@
 [build]
   base = "ted/frontend"
   command = "npm install && npm run build"
-  publish = "ted/frontend/dist"
+  publish = "dist"
 
 [build.environment]
   # Frontend talks to the Render-hosted backend
