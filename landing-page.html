@@ -356,6 +356,38 @@
       color: var(--cyan); font-size: .7rem; font-weight: 600;
       padding: 4px 12px; border-radius: 999px; letter-spacing: .06em; text-transform: uppercase;
     }
+    /* Capabilities section */
+    .cap-chip {
+      background: var(--surface); border: 1px solid var(--border-hi);
+      color: var(--text-muted); font-size: .8rem; font-weight: 500;
+      padding: 5px 12px; border-radius: 8px; white-space: nowrap;
+    }
+    .cap-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      color: var(--text-muted); font-size: .88rem; line-height: 1.5;
+    }
+    .cap-row b { color: var(--text); font-weight: 600; }
+    /* ROI breakdown lines */
+    .roi-line {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 0; border-bottom: 1px solid var(--border);
+      color: var(--text-muted); font-size: .92rem; gap: 16px;
+    }
+    .roi-line:last-child { border-bottom: none; }
+    .roi-amt { font-size: 1.3rem; font-weight: 800; color: var(--text); white-space: nowrap; letter-spacing: -.02em; }
+    .roi-amt small { font-size: .8rem; font-weight: 400; color: var(--text-dim); }
+    .roi-total { margin-top: 6px; padding-top: 20px; border-top: 2px solid var(--border-hi); }
+    .roi-total .roi-amt { font-size: 1.7rem; }
+    @media (max-width: 900px) {
+      #roi .section-inner > div:nth-child(2) { grid-template-columns: 1fr !important; }
+    }
+    .cap-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 7px;
+      background: var(--cyan); box-shadow: 0 0 6px var(--cyan-glow);
+    }
+    @media (max-width: 900px) {
+      #capabilities .section-inner > div:last-child { grid-template-columns: 1fr !important; }
+    }
     /* Large feature has a mini visual */
     .feat-visual {
       margin-top: 28px; border-radius: 10px; overflow: hidden;
@@ -590,6 +622,8 @@
     <ul class="nav-links">
       <li><a href="#features">Features</a></li>
       <li><a href="#how">How It Works</a></li>
+      <li><a href="#capabilities">Capabilities</a></li>
+      <li><a href="#roi">ROI</a></li>
       <li><a href="#pricing">Pricing</a></li>
       <li><a href="#contact">Contact</a></li>
     </ul>
@@ -806,6 +840,75 @@
   </div>
 </section>
 
+<!-- ░░ CAPABILITIES ░░ -->
+<section class="section" id="capabilities" style="background:var(--bg-2)">
+  <div class="section-inner">
+    <div style="text-align:center;margin-bottom:56px">
+      <div class="section-tag">Diagnostic &amp; Auto-Fix Coverage</div>
+      <h2 class="section-title">What TED detects &amp;<br />fixes automatically</h2>
+      <p class="section-sub" style="margin:14px auto 0">14 conditions resolved on the spot — no Service Desk required.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+
+      <!-- DETECTS -->
+      <div class="feat" style="padding:36px">
+        <div class="feat-icon">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </div>
+        <h3 style="font-size:1.25rem;margin-bottom:6px">Diagnostic Engine Detects</h3>
+        <p style="margin-bottom:22px">Live hardware + software scan completes in under 60 seconds.</p>
+
+        <div style="margin-bottom:18px">
+          <div style="color:var(--cyan);font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">Hardware</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <span class="cap-chip">CPU load</span>
+            <span class="cap-chip">Memory / RAM</span>
+            <span class="cap-chip">Disk space</span>
+            <span class="cap-chip">Battery health</span>
+            <span class="cap-chip">USB devices</span>
+            <span class="cap-chip">Display / GPU</span>
+            <span class="cap-chip">Temperature</span>
+          </div>
+        </div>
+        <div>
+          <div style="color:var(--cyan);font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">Software</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <span class="cap-chip">OS &amp; build</span>
+            <span class="cap-chip">Driver health</span>
+            <span class="cap-chip">Runaway processes</span>
+            <span class="cap-chip">DNS &amp; internet</span>
+            <span class="cap-chip">VPN status</span>
+            <span class="cap-chip">Antivirus state</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- FIXES -->
+      <div class="feat" style="padding:36px">
+        <div class="feat-icon">
+          <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h3 style="font-size:1.25rem;margin-bottom:6px">Auto-Fix Engine Resolves</h3>
+        <p style="margin-bottom:22px">Runs real system commands automatically — zero manual steps for the employee.</p>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="cap-row"><span class="cap-dot"></span><b>Wi-Fi / Network</b> — flush DNS, reset Winsock, clear ARP</div>
+          <div class="cap-row"><span class="cap-dot"></span><b>VPN</b> — reset tunnel, clear route cache</div>
+          <div class="cap-row"><span class="cap-dot"></span><b>Printer</b> — restart spooler, clear stuck queue</div>
+          <div class="cap-row"><span class="cap-dot"></span><b>Microsoft Teams</b> — clear cache, restart app</div>
+          <div class="cap-row"><span class="cap-dot"></span><b>Outlook</b> — restart &amp; repair mailbox sync</div>
+          <div class="cap-row"><span class="cap-dot"></span><b>Disk space</b> — clear temp files &amp; error reports</div>
+          <div class="cap-row"><span class="cap-dot"></span><b>High memory / slow PC</b> — reclaim RAM, kill hogs</div>
+          <div class="cap-row"><span class="cap-dot"></span><b>BSOD crashes</b> — flush logs, clear dumps, health check</div>
+          <div class="cap-row"><span class="cap-dot"></span><b>Okta / login lockout</b> — clear auth cache, self-service</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
 <!-- ░░ STATS ░░ -->
 <section class="section stats-section">
   <div class="section-inner">
@@ -826,6 +929,60 @@
         <div class="stat-num">&lt;80<span style="font-size:1.6rem">ms</span></div>
         <div class="stat-label">P99 Inference Latency</div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ ROI ░░ -->
+<section class="section" id="roi" style="background:var(--bg-2)">
+  <div class="section-inner">
+    <div style="text-align:center;margin-bottom:56px">
+      <div class="section-tag">Return on Investment</div>
+      <h2 class="section-title">Pays for itself<br />in the first quarter</h2>
+      <p class="section-sub" style="margin:14px auto 0">Modelled on a 500-employee site handling ~1,000 IT tickets per month at $22 per agent-resolved ticket.</p>
+    </div>
+
+    <!-- KPI targets -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:32px">
+      <div class="feat" style="text-align:center;padding:32px 24px">
+        <div class="stat-num" style="font-size:2.6rem">&gt;30%</div>
+        <div style="color:var(--text);font-weight:600;margin-top:6px">Ticket Deflection</div>
+        <p style="font-size:.84rem;margin-top:6px">Sessions resolved with no Service Desk ticket</p>
+      </div>
+      <div class="feat" style="text-align:center;padding:32px 24px">
+        <div class="stat-num" style="font-size:2.6rem">&lt;5<span style="font-size:1.3rem"> min</span></div>
+        <div style="color:var(--text);font-weight:600;margin-top:6px">Avg. Resolution</div>
+        <p style="font-size:.84rem;margin-top:6px">From walk-up to fix vs 2.3 days via tickets</p>
+      </div>
+      <div class="feat" style="text-align:center;padding:32px 24px">
+        <div class="stat-num" style="font-size:2.6rem">20%</div>
+        <div style="color:var(--text);font-weight:600;margin-top:6px">Faster SD Handling</div>
+        <p style="font-size:.84rem;margin-top:6px">Pre-filled, AI-enriched tickets for escalations</p>
+      </div>
+    </div>
+
+    <!-- Annual savings breakdown -->
+    <div class="feat large" style="grid-column:auto;padding:36px">
+      <h3 style="font-size:1.25rem;margin-bottom:20px">Estimated Annual Savings</h3>
+      <div style="display:flex;flex-direction:column;gap:0">
+        <div class="roi-line">
+          <span><b style="color:var(--text)">Ticket deflection</b> &nbsp;300 tickets/mo &times; $22</span>
+          <span class="roi-amt">$79,200<small>/yr</small></span>
+        </div>
+        <div class="roi-line">
+          <span><b style="color:var(--text)">SD efficiency</b> &nbsp;20% faster handle time on escalations</span>
+          <span class="roi-amt">$18,000<small>/yr</small></span>
+        </div>
+        <div class="roi-line">
+          <span><b style="color:var(--text)">Recovered productivity</b> &nbsp;employee wait time eliminated</span>
+          <span class="roi-amt">$287,500<small>/yr</small></span>
+        </div>
+        <div class="roi-line roi-total">
+          <span><b style="color:var(--text)">Total estimated saving</b></span>
+          <span class="roi-amt" style="color:var(--cyan)">$300K–400K+<small>/yr</small></span>
+        </div>
+      </div>
+      <p style="font-size:.78rem;color:var(--text-dim);margin-top:18px">Figures scale linearly with ticket volume. Based on TED Business Case v1.0 targets: &gt;80% AI diagnosis accuracy, &gt;25% self-service resolution, &gt;4.0/5.0 employee CSAT.</p>
     </div>
   </div>
 </section>
