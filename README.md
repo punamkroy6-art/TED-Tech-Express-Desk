@@ -243,6 +243,39 @@ Diagnose detects issue → matches fix_key →
 
 ---
 
+# 📡 Sensors & Hardware
+
+### 1. Onboard device sensors — **live, working today** (via `psutil`)
+TED reads the kiosk/device's own built-in sensors in real time — no external hardware required.
+
+| Sensor | Source API | Reads |
+|---|---|---|
+| **Thermal** | `psutil.sensors_temperatures()` | CPU / GPU temperature (°C) |
+| **Battery** | `psutil.sensors_battery()` | Charge %, plugged status, time remaining |
+| **CPU** | `psutil.cpu_percent()` | Load %, core count, frequency |
+| **Memory** | `psutil.virtual_memory()` | RAM usage %, swap |
+| **Disk** | `psutil.disk_usage()` | Per-drive usage %, free GB |
+
+### 2. 3-Camera Vision Module — **code-ready** (OpenCV + pyzbar)
+Written and integration-ready; activates when USB cameras are connected (`TED_CAM_*` env vars).
+
+| Camera | Role | Hardware |
+|---|---|---|
+| **Camera 0** | Screen capture — reads error text / BSOD off the employee's laptop | USB webcam + OCR |
+| **Camera 1** | Hardware inspection — scans asset tag / serial via QR & barcode | USB webcam + `pyzbar` |
+| **Camera 2** | Badge scan — auto-authenticates the employee | USB webcam |
+
+### 3. Phase-2 Hardware — **spec'd, currently mocked**
+| Component | Status |
+|---|---|
+| **RFID badge reader** (USB HID) | Mocked via on-screen login |
+| **Loaner locker** (electronic lock + removal sensor) | Mocked — returns locker bay |
+
+> **Summary:** Live sensors = thermal, battery, CPU, memory, disk (onboard, via psutil).
+> Vision = 3 USB cameras (OpenCV + barcode), code-ready. RFID + locker = Phase 2.
+
+---
+
 ## 🔗 Freshservice Integration
 
 Add 2 lines to `.env` — no code changes needed:
