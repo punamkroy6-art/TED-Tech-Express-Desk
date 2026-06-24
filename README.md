@@ -156,17 +156,44 @@ Open **http://localhost:3000** — the kiosk is live.
 
 ---
 
-## 🧠 AI Diagnostic Engine
+# 🔍 TED Diagnostic Engine — What It Detects
 
-Three-tier system — fastest path always wins:
+### 1. Hardware Diagnostics (`hardware.py` — via `psutil`)
 
-| Tier | Trigger | Examples | Confidence |
-|------|---------|---------|-----------|
-| **Rule Engine** | Keyword match on 8 built-in patterns | BSOD, VPN, Okta, Printer, Teams, Outlook, Disk, Wi-Fi | 0.55–0.95 |
-| **Groq LLM** | No rule match → LLaMA 3.3 70B | SAP, custom apps, unknown issues | 0.65 |
-| **Mock fallback** | LLM unavailable | Any | 0.3 |
+| Component | What it measures | Flags when |
+|---|---|---|
+| **CPU** | Usage %, logical/physical cores, frequency | > 85% |
+| **Memory (RAM)** | % used, used/total GB, swap usage | > 88% (critical > 95%) |
+| **Disk** | Per-drive % used, free GB, filesystem | > 80% / < 5 GB free |
+| **Battery** | Charge %, plugged status, time left | < 20% unplugged |
+| **USB devices** | Connected peripherals list | — |
+| **Display** | Adapter, resolution, VRAM | — |
+| **Thermal** | CPU/GPU temperature sensors | At high/critical threshold |
 
-### Action routing
+### 2. Software Diagnostics (`software.py`)
+
+| Check | What it detects |
+|---|---|
+| **OS info** | Version, build, hostname, last boot |
+| **Driver health** | Failed / errored device drivers |
+| **Top processes** | High CPU & high memory consumers |
+| **Network** | DNS resolution, internet connectivity, VPN adapter presence |
+| **Windows Defender** | Enabled / disabled status |
+
+### 3. AI Text Diagnosis (`ai_engine.py`)
+
+Employee types a problem → AI matches it to one of these categories:
+
+**BSOD · VPN · Wi-Fi/Network · Okta/login · Printer · Outlook · Teams · Disk · Memory/slow** — then falls back to **Groq LLaMA 3.3 70B** for anything unknown.
+
+**Three-tier routing — fastest path always wins:**
+
+| Tier | Trigger | Confidence |
+|------|---------|-----------|
+| **Rule Engine** | Keyword match on built-in patterns | 0.55–0.95 |
+| **Groq LLM** | No rule match → LLaMA 3.3 70B | 0.65 |
+| **Mock fallback** | LLM unavailable | 0.3 |
+
 ```
 self_resolve  →  ⚡ Auto-fix banner + fix steps
 guided_fix    →  Fix steps (no banner)
@@ -175,20 +202,44 @@ create_ticket →  Auto-creates Freshservice ticket + Escalate screen
 
 ---
 
-## ⚡ Auto-Fix Engine
+# ⚡ TED Auto-Fix Engine — What It Can Actually Fix
 
-Hardware diagnostics run on every session using **psutil**:
+### 9 Executable Fix Scripts (each runs real system commands)
 
-| Rule | Threshold | Fix |
-|------|-----------|-----|
-| `HIGH_CPU` | > 85% | Kill heavy processes |
-| `HIGH_MEMORY` | > 88% | Task Manager guidance |
-| `LOW_DISK` | < 5 GB free | Disk Cleanup |
-| `DISK_PERCENT_HIGH` | > 90% | Storage cleanup |
-| `LOW_BATTERY` | < 15% | Power guidance |
+| # | Fix Key | Issue | Commands Executed |
+|---|---|---|---|
+| 1 | **WIFI** | Wi-Fi / no internet | Flush DNS → Reset Winsock → Clear ARP cache |
+| 2 | **VPN** | VPN disconnecting | Flush DNS → Reset Winsock → Clear route cache |
+| 3 | **PRINTER** | Printer offline / stuck queue | Stop spooler → Clear queue → Start spooler |
+| 4 | **TEAMS** | Teams audio/video/calls | Kill Teams → Clear cache → Restart Teams |
+| 5 | **OUTLOOK** | Email not syncing | Kill Outlook → Clear temp → Restart Outlook |
+| 6 | **DISK** | Low disk space | Clear %TEMP% → Clear local temp → Remove error reports |
+| 7 | **HIGH_MEMORY** | Slow / high RAM | List top consumers → GC collect → Reclaim memory |
+| 8 | **BSOD** | Blue screen crashes | Flush event logs → Clear crash dumps → Free memory → DISM health check |
+| 9 | **OKTA** | Login / MFA lockout | Clear Edge cache → Clear Chrome cache → Open Okta self-service |
 
-SSH-based remote fix execution via **Paramiko**.
-Word incident reports generated via **python-docx** → saved to `ted/reports/`.
+### 5 Hardware Auto-Fix Rules (triggered by thresholds)
+
+| Rule | Trigger | Auto-Action |
+|---|---|---|
+| **HIGH_CPU** | CPU > 85% | Kill OneDrive/SearchIndexer background hogs |
+| **HIGH_MEMORY** | RAM > 88% | Force garbage collection |
+| **LOW_DISK** | < 5 GB free | Clear temp files |
+| **DISK_PERCENT_HIGH** | Disk > 90% | Clear temp files |
+| **LOW_BATTERY** | < 15% | Alert only (employee must plug in) |
+
+### The flow that ties them together
+
+```
+Diagnose detects issue → matches fix_key →
+  ✅ Auto-fixable  → AutoFix engine runs commands → resolved
+  ❌ Not fixable   → Ticket auto-raised with full diagnostic data
+```
+
+**Total: 7 hardware checks + 5 software checks detected · 14 conditions auto-fixable**
+
+> Architecture note: auto-fix runs as a background job (`POST /autofix/start` → poll `GET /autofix/status/{id}`), so the kiosk UI never blocks or crashes even at 100% CPU / high memory.
+> SSH-based remote fix execution via **Paramiko**; Word incident reports via **python-docx** → `ted/reports/`.
 
 ---
 
