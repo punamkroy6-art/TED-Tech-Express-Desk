@@ -20,8 +20,14 @@ export default function AutoFixingScreen() {
   const [summary, setSummary] = useState('')
   const [error, setError] = useState('')
   const pollerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollCountRef = useRef(0)
+  const MAX_POLLS = 45   // hard safety cap: 45s then force-stop (never poll forever)
 
   const fixKey: string = (diagnosis as any)?.fix_key || ''
+
+  const stopPolling = () => {
+    if (pollerRef.current) { clearInterval(pollerRef.current); pollerRef.current = null }
+  }
 
   useEffect(() => {
     if (!fixKey || !token) {
@@ -29,7 +35,7 @@ export default function AutoFixingScreen() {
       return
     }
     startJob()
-    return () => { if (pollerRef.current) clearInterval(pollerRef.current) }
+    return () => stopPolling()
   }, [])
 
   const startJob = async () => {
@@ -52,6 +58,22 @@ export default function AutoFixingScreen() {
   }
 
   const pollStatus = async (job_id: string) => {
+    // Hard safety cap — can never poll forever
+    pollCountRef.current += 1
+    if (pollCountRef.current > MAX_POLLS) {
+      stopPolling()
+      setError('Auto-fix is taking longer than expected. Raising a ticket instead.')
+      try {
+        const r = await api.post('/ticket', {
+          device_serial: '', ai_diagnosis: diagnosis,
+          error_description: 'Auto-fix timed out — escalated to Service Desk.',
+        }, { headers: { Authorization: `Bearer ${token}` } })
+        setTicketId(r.data.ticket_id)
+      } catch { /* best effort */ }
+      setTimeout(() => setScreen('ESCALATE'), 2000)
+      return
+    }
+
     try {
       const res = await api.get(`/autofix/status/${job_id}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -62,8 +84,7 @@ export default function AutoFixingScreen() {
       setSteps(job.steps || [])
 
       if (job.done) {
-        clearInterval(pollerRef.current!)
-        pollerRef.current = null
+        stopPolling()
         const passed = (job.steps || []).filter((s: Step) => s.success).length
         setSuccess(passed > 0)
         setSummary(job.summary || '')
@@ -91,9 +112,8 @@ export default function AutoFixingScreen() {
         }
       }
     } catch {
-      // Poll failed — stop and show error
-      clearInterval(pollerRef.current!)
-      pollerRef.current = null
+      // Poll failed — stop and show error (single failure, not fatal)
+      stopPolling()
       setError('Lost connection to fix engine.')
       setTimeout(() => setScreen('RESULT'), 2000)
     }

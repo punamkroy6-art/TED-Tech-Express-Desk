@@ -73,64 +73,77 @@ def _cleanup_old_jobs():
 
 
 def _run_job(job_id: str, fix_def: dict, ssh_host: str, ssh_user: str, ssh_password: str):
-    """Background thread: execute each step and update job state."""
+    """
+    Background thread: execute each step and update job state.
+    Wrapped in try/finally so the job is ALWAYS marked done — even if a step
+    raises an unexpected error. This guarantees the frontend poll always
+    terminates (no infinite polling).
+    """
     os_name = platform.system().lower()
     MAX_STEP = 8   # hard cap per step in seconds
-
     steps = fix_def.get("steps", [])
     use_ssh = bool(ssh_host and ssh_user)
 
-    for i, step in enumerate(steps):
-        label = step.get("label", f"Step {i+1}")
-        timeout = min(step.get("timeout", 8), MAX_STEP)
+    try:
+        for i, step in enumerate(steps):
+            timeout = min(step.get("timeout", 8), MAX_STEP)
 
-        # Mark step as running
-        with _JOBS_LOCK:
-            _JOBS[job_id]["steps"][i]["status"] = "running"
-            _JOBS[job_id]["current_step"] = i
+            # Mark step as running
+            with _JOBS_LOCK:
+                if job_id not in _JOBS:
+                    return  # job was cleaned up — stop
+                _JOBS[job_id]["steps"][i]["status"] = "running"
+                _JOBS[job_id]["current_step"] = i
 
-        if use_ssh:
-            cmd = step.get("command_ssh", "echo skipped")
+            # Each step fully isolated — a failure here can never kill the loop
             try:
-                import paramiko
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(hostname=ssh_host, username=ssh_user,
-                               password=ssh_password, timeout=8)
-                _, stdout, stderr = client.exec_command(cmd, timeout=timeout)
-                out = (stdout.read().decode("utf-8", errors="replace") +
-                       stderr.read().decode("utf-8", errors="replace")).strip()[:300]
-                client.close()
-                ok = True
+                if use_ssh:
+                    cmd = step.get("command_ssh", "echo skipped")
+                    import paramiko
+                    client = paramiko.SSHClient()
+                    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    client.connect(hostname=ssh_host, username=ssh_user,
+                                   password=ssh_password, timeout=8)
+                    _, stdout, stderr = client.exec_command(cmd, timeout=timeout)
+                    out = (stdout.read().decode("utf-8", errors="replace") +
+                           stderr.read().decode("utf-8", errors="replace")).strip()[:300]
+                    client.close()
+                    ok = True
+                else:
+                    cmd_key = f"command_{os_name}" if os_name in ("windows", "linux", "darwin") else "command_windows"
+                    cmd = step.get(cmd_key) or step.get("command_windows", "echo not supported")
+                    ok, out = _run_cmd(cmd, timeout)
             except Exception as e:
-                ok, out = False, f"SSH error: {str(e)[:80]}"
-        else:
-            cmd_key = f"command_{os_name}" if os_name in ("windows", "linux", "darwin") else "command_windows"
-            cmd = step.get(cmd_key) or step.get("command_windows", "echo not supported")
-            ok, out = _run_cmd(cmd, timeout)
+                ok, out = False, f"Step error: {str(e)[:80]}"
 
-        duration_ms = int(time.time() * 1000)
-
+            with _JOBS_LOCK:
+                if job_id not in _JOBS:
+                    return
+                _JOBS[job_id]["steps"][i].update({
+                    "status": "done" if ok else "failed",
+                    "success": ok,
+                    "output": out,
+                    "duration_ms": int(time.time() * 1000),
+                })
+    finally:
+        # ALWAYS mark done — guarantees frontend poll terminates
         with _JOBS_LOCK:
-            _JOBS[job_id]["steps"][i].update({
-                "status": "done" if ok else "failed",
-                "success": ok,
-                "output": out,
-                "duration_ms": duration_ms,
-            })
-
-    # Mark job complete
-    with _JOBS_LOCK:
-        job = _JOBS[job_id]
-        passed = sum(1 for s in job["steps"] if s.get("success"))
-        total = len(job["steps"])
-        job["done"] = True
-        job["overall_success"] = passed > 0
-        job["summary"] = (
-            f"Auto-fix completed — {passed}/{total} steps succeeded. Issue should be resolved."
-            if passed > 0 else
-            f"Auto-fix attempted — 0/{total} steps succeeded. A ticket will be raised."
-        )
+            job = _JOBS.get(job_id)
+            if job is not None:
+                passed = sum(1 for s in job["steps"] if s.get("success"))
+                total = len(job["steps"])
+                # Any step left pending/running (e.g. crash) → mark failed
+                for s in job["steps"]:
+                    if s["status"] in ("pending", "running"):
+                        s["status"] = "failed"
+                        s["output"] = s.get("output") or "Step did not complete"
+                job["done"] = True
+                job["overall_success"] = passed > 0
+                job["summary"] = (
+                    f"Auto-fix completed — {passed}/{total} steps succeeded. Issue should be resolved."
+                    if passed > 0 else
+                    f"Auto-fix attempted — 0/{total} steps succeeded. A ticket will be raised."
+                )
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
