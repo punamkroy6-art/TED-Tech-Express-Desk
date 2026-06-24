@@ -1,0 +1,18 @@
+# Netlify build config — builds the TED frontend in Netlify's cloud
+# (no local build needed — this machine only has 4GB RAM)
+
+[build]
+  base = "ted/frontend"
+  command = "npm install && npm run build"
+  publish = "ted/frontend/dist"
+
+[build.environment]
+  # Frontend talks to the Render-hosted backend
+  VITE_API_URL = "https://ted-tech-express-desk.onrender.com"
+  NODE_VERSION = "20"
+
+# SPA routing — all paths serve index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
