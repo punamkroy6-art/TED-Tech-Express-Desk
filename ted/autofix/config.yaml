@@ -110,23 +110,23 @@ ai_fixes:
         timeout: 5
 
   DISK:
-    name: "Disk Cleanup"
+    name: "Disk Space Recovery"
     category: storage
     severity: high
-    description: "Running automated disk cleanup to free space"
+    description: "Clearing temp files and browser cache to free disk space"
     steps:
       - label: "Clearing Windows temp files"
         command_windows: "del /s /q \"%TEMP%\\*\" 2>nul & echo Temp cleared"
         command_ssh: "rm -rf /tmp/* 2>/dev/null; echo done"
-        timeout: 15
-      - label: "Emptying Recycle Bin"
-        command_windows: "PowerShell -Command \"Clear-RecycleBin -Force -ErrorAction SilentlyContinue; Write-Output 'Recycle Bin emptied'\""
-        command_ssh: "echo not applicable"
-        timeout: 10
-      - label: "Running Disk Cleanup"
-        command_windows: "cleanmgr /sagerun:1"
-        command_ssh: "apt-get clean 2>/dev/null; echo done"
-        timeout: 30
+        timeout: 8
+      - label: "Clearing user temp folder"
+        command_windows: "del /s /q \"%LOCALAPPDATA%\\Temp\\*\" 2>nul & echo Local temp cleared"
+        command_ssh: "echo done"
+        timeout: 8
+      - label: "Removing Windows error reports"
+        command_windows: "del /s /q \"%LOCALAPPDATA%\\Microsoft\\Windows\\WER\\*\" 2>nul & echo Reports cleared"
+        command_ssh: "echo done"
+        timeout: 5
 
   HIGH_MEMORY:
     name: "Memory Optimisation"

@@ -1,121 +1,109 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { api } from '../api/client'
 import { useSession } from '../store/sessionStore'
 import { captureCurrentScreen, captureScreenText } from '../utils/screenshot'
 
-interface StepResult {
+interface Step {
   label: string
+  status: 'pending' | 'running' | 'done' | 'failed'
   success: boolean
   output: string
   duration_ms: number
-  status: 'pending' | 'running' | 'done' | 'failed'
 }
 
 export default function AutoFixingScreen() {
   const { diagnosis, token, setScreen, setTicketId } = useSession()
-  const [steps, setSteps] = useState<StepResult[]>([])
-  const [currentStep, setCurrentStep] = useState(-1)
+  const [steps, setSteps] = useState<Step[]>([])
+  const [fixName, setFixName] = useState('')
   const [done, setDone] = useState(false)
   const [success, setSuccess] = useState(false)
   const [summary, setSummary] = useState('')
-  const [fixName, setFixName] = useState('')
   const [error, setError] = useState('')
+  const pollerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const fixKey = (diagnosis as any)?.fix_key || ''
+  const fixKey: string = (diagnosis as any)?.fix_key || ''
 
   useEffect(() => {
-    if (!fixKey) {
-      // No IoT fix available — fall back to manual result screen
+    if (!fixKey || !token) {
       setScreen('RESULT')
       return
     }
-    runAutoFix()
+    startJob()
+    return () => { if (pollerRef.current) clearInterval(pollerRef.current) }
   }, [])
 
-  const runAutoFix = async () => {
+  const startJob = async () => {
     try {
-      // First, get the list of steps to show skeleton
-      setCurrentStep(0)
-      const res = await api.post('/autofix/run', {
-        fix_key: fixKey,
-        ssh_host: '',
-        ssh_user: '',
-        ssh_password: '',
-      }, {
+      // POST returns instantly — no subprocess blocking
+      const res = await api.post('/autofix/start', {
+        fix_key: fixKey, ssh_host: '', ssh_user: '', ssh_password: '',
+      }, { headers: { Authorization: `Bearer ${token}` }, timeout: 5000 })
+
+      const { job_id, fix_name } = res.data
+      setFixName(fix_name || fixKey)
+
+      // Poll every 1s — each poll is < 10ms (just reads job state)
+      pollerRef.current = setInterval(() => pollStatus(job_id), 1000)
+
+    } catch {
+      setError('Auto-fix could not start. Showing manual steps instead.')
+      setTimeout(() => setScreen('RESULT'), 2500)
+    }
+  }
+
+  const pollStatus = async (job_id: string) => {
+    try {
+      const res = await api.get(`/autofix/status/${job_id}`, {
         headers: { Authorization: `Bearer ${token}` },
-        timeout: 30000,   // hard 30s cap — prevents browser crash on long commands
+        timeout: 3000,  // must be fast
       })
+      const job = res.data
 
-      const data = res.data
-      setFixName(data.fix_name)
-      setSummary(data.summary)
-      setSuccess(data.overall_success)
+      setSteps(job.steps || [])
 
-      // Animate steps appearing one by one
-      const results: StepResult[] = data.steps.map((s: any) => ({
-        ...s,
-        status: 'pending' as const,
-      }))
+      if (job.done) {
+        clearInterval(pollerRef.current!)
+        pollerRef.current = null
+        const passed = (job.steps || []).filter((s: Step) => s.success).length
+        setSuccess(passed > 0)
+        setSummary(job.summary || '')
+        setDone(true)
 
-      for (let i = 0; i < results.length; i++) {
-        setCurrentStep(i)
-        results[i] = { ...results[i], status: 'running' }
-        setSteps([...results])
-        await new Promise(r => setTimeout(r, Math.min(results[i].duration_ms + 300, 2000)))
-        results[i] = { ...results[i], status: results[i].success ? 'done' : 'failed' }
-        setSteps([...results])
+        // Auto-raise ticket if fix failed
+        if (!passed) {
+          try {
+            const [screenshot_b64, screen_text] = await Promise.all([
+              captureCurrentScreen(),
+              Promise.resolve(captureScreenText()),
+            ])
+            const ticketRes = await api.post('/ticket', {
+              device_serial: '',
+              screenshot_b64,
+              screen_text,
+              ai_diagnosis: diagnosis,
+              autofix_results: job.steps,
+              error_description: `Auto-fix ran ${job.steps?.length} commands — all failed. Manual SD intervention needed.`,
+              diagnostic_data: {},
+              steps_attempted: [],
+            }, { headers: { Authorization: `Bearer ${token}` } })
+            setTicketId(ticketRes.data.ticket_id)
+          } catch { /* ticket creation is best-effort */ }
+        }
       }
-
-      setCurrentStep(results.length)
-      setDone(true)
-
-      // If autofix failed → create rich ticket with full context
-      if (!data.overall_success) {
-        try {
-          const [screenshot_b64, screen_text] = await Promise.all([
-            captureCurrentScreen(),
-            Promise.resolve(captureScreenText()),
-          ])
-          const failedSteps = results.filter(s => !s.success)
-          const ticketRes = await api.post('/ticket', {
-            device_serial: '',
-            screenshot_b64,
-            screen_text,
-            ai_diagnosis: diagnosis,
-            autofix_results: results.map(s => ({
-              label:   s.label,
-              success: s.success,
-              output:  s.output,
-              duration_ms: s.duration_ms,
-            })),
-            error_description: `IoT Auto-fix ran ${results.length} commands. ` +
-              `${results.filter(s => s.success).length} succeeded, ${failedSteps.length} failed. ` +
-              `Failed steps: ${failedSteps.map(s => s.label).join(', ')}`,
-            diagnostic_data: {},
-            steps_attempted: [],
-          }, { headers: { Authorization: `Bearer ${token}` } })
-          setTicketId(ticketRes.data.ticket_id)
-        } catch {}
-      }
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Auto-fix failed to start. Falling back to manual steps.')
-      setTimeout(() => setScreen('RESULT'), 3000)
+    } catch {
+      // Poll failed — stop and show error
+      clearInterval(pollerRef.current!)
+      pollerRef.current = null
+      setError('Lost connection to fix engine.')
+      setTimeout(() => setScreen('RESULT'), 2000)
     }
   }
 
-  const handleDone = () => {
-    if (success) {
-      setScreen('CSAT')
-    } else {
-      setScreen('ESCALATE')
-    }
-  }
-
+  const handleDone = () => setScreen(success ? 'CSAT' : 'ESCALATE')
   const passedCount = steps.filter(s => s.success).length
 
   return (
     <div className="ted-screen">
-      {/* Nav */}
       <nav className="ted-nav">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 30, height: 30, borderRadius: 7, background: 'linear-gradient(135deg, var(--blue), var(--cyan))', display: 'grid', placeItems: 'center' }}>
@@ -132,50 +120,32 @@ export default function AutoFixingScreen() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '32px 40px', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
         <div className="orb" style={{ width: 350, height: 350, top: -80, right: -80, background: done ? `radial-gradient(circle, ${success ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.1)'} 0%, transparent 90%)` : 'radial-gradient(circle, rgba(34,211,238,.1) 0%, transparent 90%)' }} />
 
-        {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <span className="section-tag">IoT Auto-Fix Engine</span>
           <h1 style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-.03em', color: 'var(--text)', lineHeight: 1.1 }}>
-            {done
-              ? success ? '✓ Issue Fixed Automatically' : '⚠ Partial Fix Applied'
-              : `Fixing: ${fixName || fixKey}…`}
+            {done ? (success ? '✓ Issue Fixed Automatically' : '⚠ Partial Fix Applied') : `Fixing: ${fixName || fixKey}…`}
           </h1>
           {diagnosis?.diagnosis && (
-            <p style={{ color: 'var(--text-muted)', marginTop: 8, fontSize: '.9rem', maxWidth: 600 }}>
-              {diagnosis.diagnosis}
-            </p>
+            <p style={{ color: 'var(--text-muted)', marginTop: 8, fontSize: '.9rem', maxWidth: 600 }}>{diagnosis.diagnosis}</p>
           )}
         </div>
 
         {/* Progress bar */}
         {steps.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <span style={{ fontSize: '.78rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '.1em' }}>
-              Progress
-            </span>
+            <span style={{ fontSize: '.78rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '.1em' }}>Progress</span>
             <div style={{ flex: 1, height: 6, background: 'var(--surface-hi)', borderRadius: 999, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%',
-                width: `${steps.length ? (Math.max(currentStep, 0) / steps.length) * 100 : 0}%`,
-                background: 'linear-gradient(90deg, var(--blue), var(--cyan))',
-                borderRadius: 999,
-                transition: 'width .5s ease',
-              }} />
+              <div style={{ height: '100%', width: `${steps.length ? (passedCount / steps.length) * 100 : 0}%`, background: 'linear-gradient(90deg, var(--blue), var(--cyan))', borderRadius: 999, transition: 'width .5s ease' }} />
             </div>
-            <span style={{ fontSize: '.78rem', color: 'var(--text-dim)', minWidth: 40, textAlign: 'right' }}>
-              {passedCount}/{steps.length}
-            </span>
+            <span style={{ fontSize: '.78rem', color: 'var(--text-dim)', minWidth: 40, textAlign: 'right' }}>{passedCount}/{steps.length}</span>
           </div>
         )}
 
-        {/* Step cards */}
+        {/* Step list */}
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {error ? (
-            <div style={{ padding: '16px 20px', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 'var(--radius)', color: '#fca5a5' }}>
-              {error}
-            </div>
+            <div style={{ padding: '16px 20px', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 'var(--radius)', color: '#fca5a5' }}>{error}</div>
           ) : steps.length === 0 ? (
-            // Loading skeleton
             [...Array(3)].map((_, i) => (
               <div key={i} style={{ padding: '16px 20px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--surface-hi)', animation: 'pulse-dot 1.5s ease infinite' }} />
@@ -184,90 +154,57 @@ export default function AutoFixingScreen() {
             ))
           ) : steps.map((step, i) => {
             const isRunning = step.status === 'running'
-            const isDone = step.status === 'done'
-            const isFailed = step.status === 'failed'
-            const isPending = step.status === 'pending'
-
+            const isDone    = step.status === 'done'
+            const isFailed  = step.status === 'failed'
             return (
-              <div
-                key={i}
-                style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 14, padding: '16px 20px',
-                  background: isDone ? 'rgba(34,197,94,.06)' : isFailed ? 'rgba(239,68,68,.06)' : isRunning ? 'rgba(34,211,238,.06)' : 'var(--surface)',
-                  border: `1px solid ${isDone ? 'rgba(34,197,94,.25)' : isFailed ? 'rgba(239,68,68,.25)' : isRunning ? 'rgba(34,211,238,.25)' : 'var(--border)'}`,
-                  borderRadius: 'var(--radius)',
-                  transition: 'all .3s ease',
-                  opacity: isPending ? 0.4 : 1,
-                }}
-              >
-                {/* Status icon */}
-                <div style={{
-                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                  display: 'grid', placeItems: 'center', fontSize: '.75rem', fontWeight: 700,
-                  background: isDone ? 'var(--green)' : isFailed ? 'var(--red)' : isRunning ? 'var(--cyan)' : 'var(--surface-hi)',
-                  color: isDone || isFailed || isRunning ? '#07111e' : 'var(--text-dim)',
+              <div key={i} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 18px',
+                background: isDone ? 'rgba(34,211,238,.06)' : isFailed ? 'rgba(239,68,68,.06)' : isRunning ? 'rgba(34,211,238,.04)' : 'var(--surface)',
+                border: `1px solid ${isDone ? 'rgba(34,211,238,.25)' : isFailed ? 'rgba(239,68,68,.25)' : isRunning ? 'rgba(34,211,238,.2)' : 'var(--border)'}`,
+                borderRadius: 'var(--radius)', transition: 'all .3s ease', opacity: step.status === 'pending' ? 0.4 : 1,
+              }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center', fontSize: '.8rem', fontWeight: 700,
+                  background: isDone ? 'var(--cyan)' : isFailed ? 'var(--red)' : isRunning ? 'rgba(34,211,238,.2)' : 'var(--surface-hi)',
+                  color: isDone ? '#07111e' : isFailed ? '#fff' : isRunning ? 'var(--cyan)' : 'var(--text-dim)',
                   animation: isRunning ? 'pulse-dot 1s ease infinite' : 'none',
                 }}>
                   {isDone ? '✓' : isFailed ? '✗' : isRunning ? '⟳' : i + 1}
                 </div>
-
                 <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontSize: '.9rem', fontWeight: 600,
-                    color: isDone ? 'var(--green)' : isFailed ? 'var(--red)' : isRunning ? 'var(--cyan)' : 'var(--text-muted)',
-                    marginBottom: 4,
-                  }}>
+                  <div style={{ fontSize: '.9rem', fontWeight: 600, color: isDone ? 'var(--cyan)' : isFailed ? 'var(--red)' : isRunning ? 'var(--cyan)' : 'var(--text-muted)', marginBottom: 4 }}>
                     {step.label}
-                    {step.duration_ms > 0 && isDone && (
+                    {(isDone || isFailed) && step.duration_ms > 0 && (
                       <span style={{ fontSize: '.72rem', color: 'var(--text-dim)', marginLeft: 8, fontWeight: 400 }}>
-                        {step.duration_ms > 1000 ? `${(step.duration_ms/1000).toFixed(1)}s` : `${step.duration_ms}ms`}
+                        {step.duration_ms > 1000 ? `${(step.duration_ms / 1000).toFixed(1)}s` : `${step.duration_ms}ms`}
                       </span>
                     )}
                   </div>
                   {(isDone || isFailed) && step.output && (
-                    <div style={{ fontSize: '.78rem', color: 'var(--text-dim)', fontFamily: 'monospace', background: 'rgba(0,0,0,.2)', padding: '4px 10px', borderRadius: 4, marginTop: 4 }}>
+                    <div style={{ fontSize: '.78rem', color: 'var(--text-dim)', fontFamily: 'monospace', background: 'rgba(0,0,0,.2)', padding: '4px 10px', borderRadius: 4 }}>
                       {step.output.substring(0, 120)}{step.output.length > 120 ? '…' : ''}
                     </div>
                   )}
-                  {isRunning && (
-                    <div style={{ fontSize: '.78rem', color: 'var(--cyan)', marginTop: 2 }}>
-                      Executing…
-                    </div>
-                  )}
+                  {isRunning && <div style={{ fontSize: '.78rem', color: 'var(--cyan)', marginTop: 2 }}>Executing…</div>}
                 </div>
               </div>
             )
           })}
         </div>
 
-        {/* Done — action buttons */}
+        {/* Done actions */}
         {done && (
           <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
             {summary && (
-              <div style={{
-                padding: '12px 18px', borderRadius: 'var(--radius)',
-                background: success ? 'rgba(34,197,94,.08)' : 'rgba(245,158,11,.08)',
-                border: `1px solid ${success ? 'rgba(34,197,94,.25)' : 'rgba(245,158,11,.25)'}`,
-                color: success ? 'var(--green)' : 'var(--amber)',
-                fontSize: '.88rem',
-              }}>
+              <div style={{ padding: '12px 18px', borderRadius: 'var(--radius)', background: success ? 'rgba(34,197,94,.08)' : 'rgba(245,158,11,.08)', border: `1px solid ${success ? 'rgba(34,197,94,.25)' : 'rgba(245,158,11,.25)'}`, color: success ? 'var(--green)' : 'var(--amber)', fontSize: '.88rem' }}>
                 {summary}
               </div>
             )}
             <div style={{ display: 'flex', gap: 12 }}>
-              <button
-                onClick={handleDone}
-                className="btn-primary"
-                style={{ flex: 1, padding: '14px', fontSize: '1rem', borderRadius: 'var(--radius)' }}
-              >
+              <button onClick={handleDone} className="btn-primary" style={{ flex: 1, padding: '14px', fontSize: '1rem', borderRadius: 'var(--radius)' }}>
                 {success ? '✓ Issue Resolved' : '→ Raise Ticket for Remaining Steps'}
               </button>
               {success && (
-                <button
-                  onClick={() => setScreen('RESULT')}
-                  className="btn-ghost"
-                  style={{ padding: '14px 20px', fontSize: '.9rem', borderRadius: 'var(--radius)' }}
-                >
+                <button onClick={() => setScreen('RESULT')} className="btn-ghost" style={{ padding: '14px 20px', fontSize: '.9rem', borderRadius: 'var(--radius)' }}>
                   View Details
                 </button>
               )}

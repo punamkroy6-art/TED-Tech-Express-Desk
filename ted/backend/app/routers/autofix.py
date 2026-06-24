@@ -1,102 +1,146 @@
 """
-/api/autofix/run  — IoT Auto-Fix Execution Endpoint
-Executes real system commands based on AI diagnosis category.
-Returns live step-by-step results so the frontend can show progress.
-"""
-import sys, os, subprocess, platform, asyncio, time
-from fastapi import APIRouter, Depends, HTTPException, status, Header
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import get_db
-from app.services import auth_service
+/api/autofix — Job-based IoT Auto-Fix (permanent browser-crash fix)
 
-# Make autofix module importable
-_autofix_path = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-if _autofix_path not in sys.path:
-    sys.path.insert(0, _autofix_path)
+Architecture: Fire-and-forget + polling
+  POST /autofix/start  → starts job in background thread, returns job_id INSTANTLY
+  GET  /autofix/status/{job_id} → frontend polls every 1s, gets live step updates
+
+Why: Holding an HTTP connection open for 30s while subprocess runs crashes browsers.
+     Short poll responses (< 100ms each) never crash anything.
+"""
+import sys, os, uuid, threading, platform, subprocess, time
+from fastapi import APIRouter, Header, HTTPException, status
+from pydantic import BaseModel
+from typing import Optional
+from app.services import auth_service
 
 router = APIRouter()
 
+# In-memory job store (TTL cleanup happens on each request)
+_JOBS: dict[str, dict] = {}
+_JOBS_LOCK = threading.Lock()
+JOB_TTL = 300  # seconds before a completed job is removed
 
-class AutoFixRequest(BaseModel):
-    fix_key: str          # e.g. 'WIFI', 'VPN', 'PRINTER', 'TEAMS', 'OUTLOOK', 'BSOD'
-    ssh_host: str = ""    # remote device IP (optional)
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+class StartRequest(BaseModel):
+    fix_key: str
+    ssh_host: str = ""
     ssh_user: str = ""
     ssh_password: str = ""
 
 
-class StepResult(BaseModel):
-    label: str
-    success: bool
-    output: str
-    duration_ms: int
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-
-class AutoFixResponse(BaseModel):
-    fix_key: str
-    fix_name: str
-    overall_success: bool
-    steps: list[StepResult]
-    summary: str
-
-
-def _run_command(cmd: str, timeout: int = 30) -> tuple[bool, str]:
-    """Execute a shell command and return (success, output)."""
+def _run_cmd(cmd: str, timeout: int = 8) -> tuple[bool, str]:
+    """Run a shell command. Hard-capped at `timeout` seconds."""
     try:
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            encoding='utf-8',
-            errors='replace'
+        r = subprocess.run(
+            cmd, shell=True, capture_output=True,
+            text=True, timeout=timeout,
+            encoding="utf-8", errors="replace"
         )
-        output = (result.stdout + result.stderr).strip()
-        return result.returncode == 0, output[:300] or "Command completed"
+        out = (r.stdout + r.stderr).strip()[:300] or "Command completed"
+        return r.returncode == 0, out
     except subprocess.TimeoutExpired:
-        return False, f"Command timed out after {timeout}s"
+        return False, f"Timed out after {timeout}s"
     except Exception as e:
-        return False, f"Error: {str(e)[:100]}"
+        return False, f"Error: {str(e)[:80]}"
 
 
-def _run_ssh_command(cmd: str, host: str, user: str, password: str, timeout: int = 30) -> tuple[bool, str]:
-    """Execute command on remote device via SSH."""
-    try:
-        import paramiko
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(hostname=host, username=user, password=password, timeout=10)
-        _, stdout, stderr = client.exec_command(cmd, timeout=timeout)
-        out = stdout.read().decode('utf-8', errors='replace').strip()
-        err = stderr.read().decode('utf-8', errors='replace').strip()
-        client.close()
-        return True, (out or err or "Command completed")[:300]
-    except Exception as e:
-        return False, f"SSH error: {str(e)[:100]}"
-
-
-def _load_fix_config(fix_key: str) -> dict | None:
-    """Load fix definition from config.yaml."""
+def _load_config(fix_key: str) -> Optional[dict]:
     try:
         import yaml
-        config_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'autofix', 'config.yaml')
-        with open(os.path.normpath(config_path)) as f:
-            config = yaml.safe_load(f)
-        return config.get('ai_fixes', {}).get(fix_key.upper())
+        cfg_path = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "autofix", "config.yaml")
+        )
+        with open(cfg_path) as f:
+            cfg = yaml.safe_load(f)
+        return cfg.get("ai_fixes", {}).get(fix_key.upper())
     except Exception:
         return None
 
 
-@router.post("/autofix/run", response_model=AutoFixResponse)
-async def run_autofix(
-    body: AutoFixRequest,
-    authorization: str = Header(...),
-    db: AsyncSession = Depends(get_db),
-):
+def _cleanup_old_jobs():
+    """Remove jobs older than JOB_TTL seconds."""
+    now = time.time()
+    with _JOBS_LOCK:
+        stale = [jid for jid, job in _JOBS.items()
+                 if now - job.get("created_at", now) > JOB_TTL]
+        for jid in stale:
+            del _JOBS[jid]
+
+
+def _run_job(job_id: str, fix_def: dict, ssh_host: str, ssh_user: str, ssh_password: str):
+    """Background thread: execute each step and update job state."""
+    os_name = platform.system().lower()
+    MAX_STEP = 8   # hard cap per step in seconds
+
+    steps = fix_def.get("steps", [])
+    use_ssh = bool(ssh_host and ssh_user)
+
+    for i, step in enumerate(steps):
+        label = step.get("label", f"Step {i+1}")
+        timeout = min(step.get("timeout", 8), MAX_STEP)
+
+        # Mark step as running
+        with _JOBS_LOCK:
+            _JOBS[job_id]["steps"][i]["status"] = "running"
+            _JOBS[job_id]["current_step"] = i
+
+        if use_ssh:
+            cmd = step.get("command_ssh", "echo skipped")
+            try:
+                import paramiko
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(hostname=ssh_host, username=ssh_user,
+                               password=ssh_password, timeout=8)
+                _, stdout, stderr = client.exec_command(cmd, timeout=timeout)
+                out = (stdout.read().decode("utf-8", errors="replace") +
+                       stderr.read().decode("utf-8", errors="replace")).strip()[:300]
+                client.close()
+                ok = True
+            except Exception as e:
+                ok, out = False, f"SSH error: {str(e)[:80]}"
+        else:
+            cmd_key = f"command_{os_name}" if os_name in ("windows", "linux", "darwin") else "command_windows"
+            cmd = step.get(cmd_key) or step.get("command_windows", "echo not supported")
+            ok, out = _run_cmd(cmd, timeout)
+
+        duration_ms = int(time.time() * 1000)
+
+        with _JOBS_LOCK:
+            _JOBS[job_id]["steps"][i].update({
+                "status": "done" if ok else "failed",
+                "success": ok,
+                "output": out,
+                "duration_ms": duration_ms,
+            })
+
+    # Mark job complete
+    with _JOBS_LOCK:
+        job = _JOBS[job_id]
+        passed = sum(1 for s in job["steps"] if s.get("success"))
+        total = len(job["steps"])
+        job["done"] = True
+        job["overall_success"] = passed > 0
+        job["summary"] = (
+            f"Auto-fix completed — {passed}/{total} steps succeeded. Issue should be resolved."
+            if passed > 0 else
+            f"Auto-fix attempted — 0/{total} steps succeeded. A ticket will be raised."
+        )
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.post("/autofix/start")
+async def start_autofix(body: StartRequest, authorization: str = Header(...)):
     """
-    Execute IoT auto-fix commands for the diagnosed issue.
-    Runs each step sequentially and returns pass/fail per step.
+    Start an auto-fix job. Returns job_id IMMEDIATELY (no waiting).
+    The job runs in a background thread.
+    Frontend polls /autofix/status/{job_id} every 1 second for updates.
     """
     token = authorization.removeprefix("Bearer ").strip()
     try:
@@ -104,77 +148,126 @@ async def run_autofix(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    fix_def = _load_fix_config(body.fix_key)
+    fix_def = _load_config(body.fix_key)
     if not fix_def:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No auto-fix defined for key: {body.fix_key}"
+            detail=f"No auto-fix defined for: {body.fix_key}"
         )
 
-    os_name = platform.system().lower()
-    use_ssh = bool(body.ssh_host and body.ssh_user)
+    _cleanup_old_jobs()
 
-    step_results: list[StepResult] = []
+    job_id = str(uuid.uuid4())[:12]
+    steps_init = [
+        {"label": s.get("label", f"Step {i+1}"), "status": "pending",
+         "success": False, "output": "", "duration_ms": 0}
+        for i, s in enumerate(fix_def.get("steps", []))
+    ]
 
-    MAX_STEP_TIMEOUT = 8    # hard cap per step — total fix must complete in <25s
+    with _JOBS_LOCK:
+        _JOBS[job_id] = {
+            "job_id": job_id,
+            "fix_key": body.fix_key,
+            "fix_name": fix_def.get("name", body.fix_key),
+            "done": False,
+            "overall_success": False,
+            "current_step": -1,
+            "steps": steps_init,
+            "summary": "",
+            "created_at": time.time(),
+        }
 
-    for step in fix_def.get('steps', []):
-        label = step.get('label', 'Running fix...')
-        timeout = min(step.get('timeout', 15), MAX_STEP_TIMEOUT)
-        t0 = time.time()
-
-        if use_ssh:
-            cmd = step.get('command_ssh', 'echo skipped')
-            success, output = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: _run_ssh_command(cmd, body.ssh_host, body.ssh_user, body.ssh_password, timeout)
-            )
-        else:
-            cmd_key = f'command_{os_name}' if os_name in ('windows', 'linux', 'darwin') else 'command_windows'
-            cmd = step.get(cmd_key) or step.get('command_windows', 'echo not supported')
-            success, output = await asyncio.get_event_loop().run_in_executor(
-                None, lambda c=cmd, t=timeout: _run_command(c, t)
-            )
-
-        duration_ms = int((time.time() - t0) * 1000)
-        step_results.append(StepResult(
-            label=label,
-            success=success,
-            output=output,
-            duration_ms=duration_ms,
-        ))
-
-    overall_success = any(s.success for s in step_results)
-    passed = sum(1 for s in step_results if s.success)
-    total = len(step_results)
-
-    if overall_success:
-        summary = f"Auto-fix completed — {passed}/{total} steps succeeded. Issue should be resolved."
-    else:
-        summary = f"Auto-fix attempted — {passed}/{total} steps succeeded. A ticket has been raised for the remaining steps."
-
-    return AutoFixResponse(
-        fix_key=body.fix_key,
-        fix_name=fix_def.get('name', body.fix_key),
-        overall_success=overall_success,
-        steps=step_results,
-        summary=summary,
+    # Start background thread — returns instantly
+    t = threading.Thread(
+        target=_run_job,
+        args=(job_id, fix_def, body.ssh_host, body.ssh_user, body.ssh_password),
+        daemon=True,
     )
+    t.start()
+
+    return {"job_id": job_id, "fix_name": fix_def.get("name"), "total_steps": len(steps_init)}
 
 
-@router.get("/autofix/keys")
-async def list_fix_keys(authorization: str = Header(...)):
-    """List all available auto-fix keys."""
+@router.get("/autofix/status/{job_id}")
+async def get_autofix_status(job_id: str, authorization: str = Header(...)):
+    """
+    Poll job status. Returns current step progress.
+    Frontend calls this every 1 second until done=true.
+    Response is always fast (< 10ms) — no subprocess blocking.
+    """
+    token = authorization.removeprefix("Bearer ").strip()
     try:
-        auth_service.decode_token(authorization.removeprefix("Bearer ").strip())
+        auth_service.decode_token(token)
     except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found or expired")
+
+    return job
+
+
+@router.post("/autofix/run")
+async def run_autofix_legacy(body: StartRequest, authorization: str = Header(...)):
+    """
+    Legacy sync endpoint kept for backward compat.
+    Now internally uses the job system with a short poll loop.
+    Max wait: 25s. If job not done, returns partial results.
+    """
+    token = authorization.removeprefix("Bearer ").strip()
     try:
-        import yaml
-        config_path = os.path.normpath(os.path.join(
-            os.path.dirname(__file__), '..', '..', '..', 'autofix', 'config.yaml'
-        ))
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-        return {k: v.get('name', k) for k, v in config.get('ai_fixes', {}).items()}
-    except Exception as e:
-        return {"error": str(e)}
+        auth_service.decode_token(token)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    # Start job
+    fix_def = _load_config(body.fix_key)
+    if not fix_def:
+        raise HTTPException(status_code=404, detail=f"No fix for: {body.fix_key}")
+
+    job_id = str(uuid.uuid4())[:12]
+    steps_init = [
+        {"label": s.get("label", f"Step {i+1}"), "status": "pending",
+         "success": False, "output": "", "duration_ms": 0}
+        for i, s in enumerate(fix_def.get("steps", []))
+    ]
+    with _JOBS_LOCK:
+        _JOBS[job_id] = {
+            "job_id": job_id, "fix_key": body.fix_key,
+            "fix_name": fix_def.get("name", body.fix_key),
+            "done": False, "overall_success": False,
+            "current_step": -1, "steps": steps_init,
+            "summary": "", "created_at": time.time(),
+        }
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+    t = threading.Thread(target=_run_job,
+                         args=(job_id, fix_def, body.ssh_host, body.ssh_user, body.ssh_password),
+                         daemon=True)
+    t.start()
+
+    # Poll up to 24s (3 steps × 8s max)
+    for _ in range(24):
+        await asyncio.sleep(1)
+        with _JOBS_LOCK:
+            job = _JOBS.get(job_id, {})
+        if job.get("done"):
+            break
+
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id, {})
+
+    passed = sum(1 for s in job.get("steps", []) if s.get("success"))
+    total = len(job.get("steps", []))
+
+    return {
+        "fix_key": body.fix_key,
+        "fix_name": job.get("fix_name", body.fix_key),
+        "overall_success": passed > 0,
+        "steps": job.get("steps", []),
+        "summary": job.get("summary") or f"Auto-fix completed — {passed}/{total} steps succeeded.",
+    }
