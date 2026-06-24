@@ -31,14 +31,18 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Enable CORS for frontend UI requests
+# allow_origin_regex handles wildcard subdomains (FastAPI does NOT wildcard-match
+# entries in allow_origins — it needs regex for that).
 app.add_middleware(CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:4173",
         "http://localhost:5173",
-        "https://ted-tech-express-desk.vercel.app",
-        "https://*.vercel.app",   # preview deployments
+        "https://techexpressdesk.netlify.app",
+        "https://keen-rabanadas-f6666c.netlify.app",
     ],
+    # Allow ANY netlify.app or vercel.app subdomain (covers preview + future deploys)
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*(netlify|vercel)\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
