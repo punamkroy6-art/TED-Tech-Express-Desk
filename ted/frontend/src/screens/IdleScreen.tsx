@@ -54,7 +54,7 @@ export default function IdleScreen() {
           <span style={{ color: 'var(--text-dim)', fontSize: '.8rem' }}>KIOSK-001 · Building A · Level 2</span>
           <span style={{ width: 1, height: 14, background: 'var(--border-hi)' }} />
           <a
-            href="http://localhost:5500/landing-page.html"
+            href="https://keen-rabanadas-f6666c.netlify.app"
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
