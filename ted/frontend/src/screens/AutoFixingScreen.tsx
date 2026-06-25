@@ -40,10 +40,10 @@ export default function AutoFixingScreen() {
 
   const startJob = async () => {
     try {
-      // POST returns instantly — no subprocess blocking
+      // 60s timeout handles cold-start on free-tier hosting (server may be asleep)
       const res = await api.post('/autofix/start', {
         fix_key: fixKey, ssh_host: '', ssh_user: '', ssh_password: '',
-      }, { headers: { Authorization: `Bearer ${token}` }, timeout: 5000 })
+      }, { headers: { Authorization: `Bearer ${token}` }, timeout: 60000 })
 
       const { job_id, fix_name } = res.data
       setFixName(fix_name || fixKey)
